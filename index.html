@@ -2,33 +2,36 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Prabhu Family Tree</title>
 <style>
-:root{--ink:#29261f;--muted:#7c7467;--paper:#f5f1e8;--card:#fffdf8;--line:#b9ab91;--accent:#987948}
+:root{--ink:#29261f;--muted:#7c7467;--paper:#f5f1e8;--line:#b9ab91;--accent:#987948}
 *{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--paper);color:var(--ink);font-family:Inter,system-ui,sans-serif}body{overflow:hidden}
-header{height:112px;padding:25px 32px;border-bottom:1px solid #ded5c5;background:#f5f1e8;position:relative;z-index:3}
+
+header{height:100px;padding:20px 32px;border-bottom:1px solid #ded5c5;position:relative;z-index:3;background:var(--paper)}
 .kicker{font-size:10px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--accent)}
-h1{font:400 clamp(28px,4vw,44px) Georgia,serif;margin:4px 0}.subtitle{font-size:12px;color:var(--muted)}
-.controls{position:absolute;right:28px;bottom:25px;display:flex;gap:6px}button{border:1px solid #d8cfbf;background:#fffdf8;border-radius:9px;padding:8px 11px;color:var(--ink);cursor:pointer}
-.viewport{height:calc(100vh - 112px);overflow:auto;cursor:grab}.viewport.dragging{cursor:grabbing}.canvas{position:relative;min-width:4000px;min-height:2500px;padding:60px;transform-origin:top left}
+h1{font:400 clamp(24px,3vw,36px) Georgia,serif;margin:2px 0}.subtitle{font-size:12px;color:var(--muted)}
+.controls{position:absolute;right:28px;bottom:20px;display:flex;gap:6px}
+button{border:1px solid #d8cfbf;background:#fffdf8;border-radius:8px;padding:6px 12px;color:var(--ink);cursor:pointer}
+
+.viewport{height:calc(100vh - 100px);overflow:auto;cursor:grab}.viewport.dragging{cursor:grabbing}
+.canvas{position:relative;width:max-content;min-width:100%;min-height:100%;padding:80px;transform-origin:top left}
 
 #tree-svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1}
 #tree-svg path{fill:none;stroke:var(--line);stroke-width:1.5px}
 
-.tree-container{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;gap:80px}
-.generation{display:flex;justify-content:center;gap:40px;width:100%}
+.tree-container{position:relative;z-index:2;display:flex;justify-content:center}
+.branch{display:flex;flex-direction:column;align-items:center}
+.children{display:flex;gap:36px;margin-top:70px}
 
-.person{width:150px;text-align:center;position:relative}
-.photo{width:108px;height:108px;margin:auto;border-radius:50%;border:1px solid #bba98b;background:linear-gradient(145deg,#e2dccf,#c1b6a1);position:relative;box-shadow:0 9px 22px #493a2815}
+.person{width:140px;text-align:center;position:relative}
+.photo{width:96px;height:96px;margin:auto;border-radius:50%;border:1px solid #bba98b;background:linear-gradient(145deg,#e2dccf,#c1b6a1);position:relative;box-shadow:0 8px 18px #493a2812}
 .photo:before{content:"";position:absolute;left:40%;top:24%;width:21%;height:21%;border-radius:50%;background:#8e8575aa}
 .photo:after{content:"";position:absolute;left:27%;bottom:11%;width:46%;height:42%;border-radius:50% 50% 42% 42%;background:#8e857566}
-.name{font:400 15px/1.25 Georgia,serif;margin-top:11px;min-height:38px}
-.years{font-size:11px;color:var(--muted);letter-spacing:.08em;margin-top:3px}
-.relation{font-size:9px;text-transform:uppercase;letter-spacing:.16em;color:#9a8768;margin-bottom:5px;font-weight:600}
+.name{font:400 14px/1.25 Georgia,serif;margin-top:8px;min-height:35px}
+.years{font-size:11px;color:var(--muted);margin-top:2px}
+.relation{font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:#9a8768;margin-bottom:4px;font-weight:600}
 
-.root-person{width:190px}
-.root-person .photo{width:145px;height:145px}
-.root-person .name{font-size:20px}
-
-@media(max-width:700px){header{height:130px;padding:18px}.controls{left:18px;right:auto;bottom:16px}.viewport{height:calc(100vh - 130px)}.canvas{padding:40px}}
+.root-person{width:170px}
+.root-person .photo{width:130px;height:130px}
+.root-person .name{font-size:18px}
 </style></head>
 <body>
 <header>
@@ -53,110 +56,94 @@ h1{font:400 clamp(28px,4vw,44px) Georgia,serif;margin:4px 0}.subtitle{font-size:
 const data = window.FAMILY_DATA || [], 
       byId = Object.fromEntries(data.map(p => [p.id, p])), 
       treeContainer = document.getElementById("tree"),
-      svg = document.getElementById("tree-svg");
+      svg = document.getElementById("tree-svg"),
+      canvas = document.getElementById("canvas"),
+      vp = document.getElementById("viewport");
+
+let cardElements = {}, scale = 1;
 
 function rel(parent, child) { 
     return child.gender === "female" ? "Daughter" : child.gender === "male" ? "Son" : "Child"; 
 }
 
-function buildTreeData(rootId) {
-    let mapByDepth = {};
-    let queue = [{id: rootId, depth: 0}];
+function createBranch(id, parentObj = null) {
+    const p = byId[id];
+    if (!p) return null;
 
-    while(queue.length > 0) {
-        let {id, depth} = queue.shift();
-        let p = byId[id];
-        if(!p) continue;
+    const branch = document.createElement("div");
+    branch.className = "branch";
 
-        if(!mapByDepth[depth]) mapByDepth[depth] = [];
-        mapByDepth[depth].push(p);
+    const isRoot = (id === "padmanabh");
+    const card = document.createElement("div");
+    card.className = isRoot ? "person root-person" : "person";
+    cardElements[p.id] = card;
 
-        let kids = (p.children || []).map(x => byId[x]).filter(Boolean);
+    const label = parentObj ? rel(parentObj, p) : "";
+    card.innerHTML = `<div class="relation">${label || "&nbsp;"}</div><div class="photo"></div><div class="name">${p.name}</div><div class="years">—</div>`;
+    branch.appendChild(card);
+
+    const kids = (p.children || []).map(kId => byId[kId]).filter(Boolean);
+    if (kids.length > 0) {
+        const childrenContainer = document.createElement("div");
+        childrenContainer.className = "children";
         kids.forEach(k => {
-            queue.push({id: k.id, depth: depth + 1});
+            const childBranch = createBranch(k.id, p);
+            if (childBranch) childrenContainer.appendChild(childBranch);
         });
+        branch.appendChild(childrenContainer);
     }
-    return mapByDepth;
+    return branch;
+}
+
+function drawLines() {
+    svg.innerHTML = "";
+    const canvasRect = canvas.getBoundingClientRect();
+
+    data.forEach(parent => {
+        if (!parent.children || !parent.children.length) return;
+        const parentEl = cardElements[parent.id];
+        if (!parentEl) return;
+
+        const pRect = parentEl.getBoundingClientRect();
+        const pX = (pRect.left + pRect.width / 2 - canvasRect.left) / scale;
+        const pY = (pRect.bottom - canvasRect.top) / scale;
+
+        parent.children.forEach(childId => {
+            const childEl = cardElements[childId];
+            if (!childEl) return;
+
+            const cRect = childEl.getBoundingClientRect();
+            const cX = (cRect.left + cRect.width / 2 - canvasRect.left) / scale;
+            const cY = (cRect.top - canvasRect.top) / scale;
+
+            const midY = pY + (cY - pY) / 2;
+            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            path.setAttribute("d", `M ${pX} ${pY} V ${midY} H ${cX} V ${cY}`);
+            svg.appendChild(path);
+        });
+    });
 }
 
 function renderTree() {
     treeContainer.innerHTML = "";
-    svg.innerHTML = "";
-    
-    let levels = buildTreeData("padmanabh");
-    let cardElements = {};
-
-    Object.keys(levels).sort((a,b)=>a-b).forEach(depth => {
-        let genDiv = document.createElement("div");
-        genDiv.className = depth == 0 ? "generation root-generation" : "generation";
-        
-        levels[depth].forEach(p => {
-            let isRoot = (p.id === "padmanabh");
-            let d = document.createElement("div");
-            d.className = isRoot ? "person root-person" : "person";
-            d.dataset.id = p.id;
-            
-            let label = "";
-            if(!isRoot) {
-                let parentObj = data.find(item => item.children && item.children.includes(p.id));
-                if(parentObj) label = rel(parentObj, p);
-            }
-
-            d.innerHTML = `<div class="relation">${label || "&nbsp;"}</div><div class="photo"></div><div class="name">${p.name}</div><div class="years">—</div>`;
-            genDiv.appendChild(d);
-            cardElements[p.id] = d;
-        });
-        treeContainer.appendChild(genDiv);
-    });
-
-    setTimeout(() => {
-        let canvasRect = canvas.getBoundingClientRect();
-        
-        data.forEach(parent => {
-            if(!parent.children || parent.children.length === 0) return;
-            let parentEl = cardElements[parent.id];
-            if(!parentEl) return;
-
-            let pRect = parentEl.getBoundingClientRect();
-            let pX = (pRect.left + pRect.width / 2 - canvasRect.left) / scale;
-            let pY = (pRect.bottom - canvasRect.top) / scale;
-
-            parent.children.forEach(childId => {
-                let childEl = cardElements[childId];
-                if(!childEl) return;
-
-                let cRect = childEl.getBoundingClientRect();
-                let cX = (cRect.left + cRect.width / 2 - canvasRect.left) / scale;
-                let cY = (cRect.top - canvasRect.top) / scale;
-
-                let midY = pY + (cY - pY) / 2;
-                
-                let path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                path.setAttribute("d", `M ${pX} ${pY} V ${midY} H ${cX} V ${cY}`);
-                svg.appendChild(path);
-            });
-        });
-    }, 50);
+    cardElements = {};
+    const rootBranch = createBranch("padmanabh");
+    if (rootBranch) treeContainer.appendChild(rootBranch);
+    setTimeout(drawLines, 30);
 }
 
-renderTree();
-
-let scale = 1, 
-    canvas = document.getElementById("canvas"), 
-    vp = document.getElementById("viewport");
-
-function apply() { 
+function applyScale() { 
     canvas.style.transform = `scale(${scale})`; 
     document.getElementById("reset").textContent = Math.round(scale * 100) + "%"; 
-    renderTree(); 
+    drawLines();
 }
 
-document.getElementById("in").onclick = () => { scale = Math.min(1.7, scale + 0.1); apply(); };
-document.getElementById("out").onclick = () => { scale = Math.max(0.45, scale - 0.1); apply(); };
-document.getElementById("reset").onclick = () => { scale = 1; apply(); };
+document.getElementById("in").onclick = () => { scale = Math.min(1.7, scale + 0.1); applyScale(); };
+document.getElementById("out").onclick = () => { scale = Math.max(0.35, scale - 0.1); applyScale(); };
+document.getElementById("reset").onclick = () => { scale = 1; applyScale(); };
 document.getElementById("fit").onclick = () => { 
-    scale = Math.max(0.45, Math.min(1, (vp.clientWidth - 30) / canvas.scrollWidth, (vp.clientHeight - 30) / canvas.scrollHeight)); 
-    apply(); 
+    scale = Math.max(0.35, Math.min(1, (vp.clientWidth - 40) / canvas.scrollWidth, (vp.clientHeight - 40) / canvas.scrollHeight)); 
+    applyScale(); 
     vp.scrollTo(0, 0); 
 };
 
@@ -164,4 +151,7 @@ let drag = false, sx, sy, sl, st;
 vp.onpointerdown = e => { drag = true; vp.classList.add("dragging"); sx = e.clientX; sy = e.clientY; sl = vp.scrollLeft; st = vp.scrollTop; vp.setPointerCapture(e.pointerId); };
 vp.onpointermove = e => { if (drag) { vp.scrollLeft = sl - e.clientX + sx; vp.scrollTop = st - e.clientY + sy; } };
 vp.onpointerup = () => { drag = false; vp.classList.remove("dragging"); };
+
+renderTree();
+window.onresize = drawLines;
 </script></body></html>
