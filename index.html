@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Prabhu Family Tree</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#f4f0e7;color:#26231f;font-family:Georgia,'Times New Roman',serif}body{overflow:auto}.wrap{min-width:1200px;padding:34px 34px 80px}.head{text-align:center;margin-bottom:28px}.eyebrow{font:600 11px Arial,sans-serif;letter-spacing:.24em;text-transform:uppercase;color:#806548}.head h1{font-size:42px;font-weight:500;margin:8px 0}.head p{font:13px Arial,sans-serif;color:#817b71;margin:0}.canvas{position:relative;margin:auto;overflow:visible}.svg{position:absolute;inset:0;pointer-events:none;overflow:visible}.node{position:absolute;width:156px;transform:translateX(-50%)}.card{background:#fffdf8;border:1px solid #d7d0c2;border-radius:9px;padding:7px 7px 10px;box-shadow:0 6px 20px rgba(58,47,31,.08)}.photo{height:112px;border-radius:6px;background:linear-gradient(135deg,#ddd6c9,#bdb4a5);display:flex;align-items:center;justify-content:center;color:#8b8274;font:10px Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase}.name{text-align:center;font-size:15px;line-height:1.15;margin:9px 3px 0}.years{text-align:center;font:11px Arial,sans-serif;color:#817b71;margin-top:5px}.relation{position:absolute;transform:translate(-50%,-50%);font:9px Arial,sans-serif;color:#806548;letter-spacing:.08em;text-transform:uppercase;background:#f4f0e7;padding:2px 6px;z-index:4}.unknown .photo{background:repeating-linear-gradient(135deg,#e5dfd3 0,#e5dfd3 8px,#d9d1c4 8px,#d9d1c4 16px)}.foot{text-align:center;font:12px Arial,sans-serif;color:#8a8379;margin-top:22px}
+</style></head><body><div class="wrap"><header class="head"><div class="eyebrow">A Family History</div><h1>The Prabhu Family</h1><p>An evolving record of generations</p></header><div id="canvas" class="canvas"><svg id="svg" class="svg"></svg></div><div class="foot">Scroll horizontally and vertically to explore the tree. Photos and dates are ready to be added.</div></div>
+<script>
+const P=(id,name,children=[],years='—',gender='')=>({id,name,children,years,gender});
+const data=P('padmanabh','Padmanabh Prabhu',[
+ P('ganga','Ganga Prabhu',[], '—','Daughter'),
+ P('dutt','Dutt Prabhu',[P('prema','Prema'),P('baby','Baby'),P('ratnakar','Ratnakar')],'—','Son'),
+ P('ram','Ram Prabhu',[
+  P('narasim','Narasim Ram Prabhu',[
+   P('digambar','Digambar',[P('ashish','Ashish'),P('dig_u1','Unknown'),P('dig_u2','Unknown'),P('dig_u3','Unknown')]),
+   P('kashinath','Kashinath',[P('prashanth','Prashanth'),P('pavitra','Pavitra')]),
+   P('vignesh','Vignesh',[P('vig_u1','Unknown'),P('vig_u2','Unknown'),P('vig_u3','Unknown')]),
+   P('vijayi','Vijayi',[P('vij_u1','Unknown'),P('vij_u2','Unknown'),P('vij_u3','Unknown')]),
+   P('sunanda','Sunanda',[P('sun_u1','Unknown')]),P('sapati','Sapati'),P('budkulo','Budkulo'),P('nar_u8','Unknown')
+  ],'—','Son'),
+  P('govind','Govind Rao Ram Prabhu',[P('murlidhar','Murlidhar'),P('gajanand','Gajanand'),P('veenu','Veenu'),P('kamli','Kamli'),P('pari','Pari')],'—','Son'),
+  P('hari','Hari Ram Prabhu',[P('rohidas','Rohidas Prabhu'),P('ullas','Ullas Prabhu'),P('vasudev','Vasudev Prabhu'),P('sumana','Sumana Prabhu')],'—','Son'),
+  P('mukund','Mukund Ram Prabhu',[P('dinkar','Dinkar')],'—','Son'),
+  P('madhu','Madhu Ram Prabhu',[P('satish','Satish'),P('ramesh','Ramesh')],'—','Son'),
+  P('kalyani','Kalyani Ram Prabhu',[P('gopinath','Gopinath'),P('dayanand','Dayanand'),P('prabakar','Prabakar'),P('kal_u4','Unknown'),P('kal_u5','Unknown')],'—','Daughter'),
+  P('triveni','Triveni Ram Prabhu',[P('jagdish','Jagdish'),P('sadanand','Sadanand'),P('uday','Uday'),P('ganesh','Ganesh'),P('tri_u5','Unknown'),P('tri_u6','Unknown')],'—','Daughter')
+ ],'—','Son'),
+ P('krishna','Krishna Prabhu',[P('mohan','Mohan'),P('k_u2','Unknown'),P('k_u3','Unknown'),P('k_u4','Unknown'),P('k_u5','Unknown'),P('k_u6','Unknown')],'—','Son')
+]);
+
+const canvas=document.getElementById('canvas'), svg=document.getElementById('svg');
+const levels=[]; function depth(n,d=0){(levels[d]??=[]).push(n);n.children.forEach(c=>depth(c,d+1))} depth(data);
+const gapX=34, gapY=170, cardW=156, rowH=165;
+let positions=new Map();
+function subtreeWidth(n){if(!n.children.length)return cardW+gapX;return n.children.reduce((s,c)=>s+subtreeWidth(c),0)}
+function layout(n,depth,left){const w=subtreeWidth(n);const x=left+w/2;const y=depth*rowH;positions.set(n.id,{x,y,n});let cursor=left;for(const c of n.children){const cw=subtreeWidth(c);layout(c,depth+1,cursor);cursor+=cw}return {w,x}}
+const totalW=subtreeWidth(data)+120; const maxDepth=levels.length; const totalH=maxDepth*rowH+40;canvas.style.width=totalW+'px';canvas.style.height=totalH+'px';layout(data,0,60);
+function esc(s){return s.replace(/[&<>\"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','\\':'&#92;','"':'&quot;'}[m]))}
+function addNodes(n){const p=positions.get(n.id);const el=document.createElement('div');el.className='node'+(n.name==='Unknown'?' unknown':'');el.style.left=p.x+'px';el.style.top=p.y+'px';el.innerHTML=`<div class="card"><div class="photo">${n.name==='Unknown'?'Unknown':'Photo'}</div><div class="name">${esc(n.name)}</div><div class="years">${esc(n.years)}</div></div>`;canvas.appendChild(el);n.children.forEach(addNodes)}addNodes(data);
+function line(x1,y1,x2,y2,rel){const mid=(y1+y2)/2;let s=`<path d="M ${x1} ${y1} V ${mid} H ${x2} V ${y2}" fill="none" stroke="#bdb5a7" stroke-width="1.5"/>`;if(rel){const lx=(x1+x2)/2,ly=mid-2;s+=`<text x="${lx}" y="${ly}" text-anchor="middle" fill="#806548" font-family="Arial" font-size="9" letter-spacing="1">${rel.toUpperCase()}</text>`}return s}
+let paths='';function connect(n){const a=positions.get(n.id);for(const c of n.children){const b=positions.get(c.id);paths+=line(a.x,a.y+132,b.x,b.y, c.gender);connect(c)}}connect(data);svg.setAttribute('width',totalW);svg.setAttribute('height',totalH);svg.innerHTML=paths;
+</script></body></html>
