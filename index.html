@@ -8,57 +8,97 @@ header{height:112px;padding:25px 32px;border-bottom:1px solid #ded5c5;background
 .kicker{font-size:10px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--accent)}
 h1{font:400 clamp(28px,4vw,44px) Georgia,serif;margin:4px 0}.subtitle{font-size:12px;color:var(--muted)}
 .controls{position:absolute;right:28px;bottom:25px;display:flex;gap:6px}button{border:1px solid #d8cfbf;background:#fffdf8;border-radius:9px;padding:8px 11px;color:var(--ink);cursor:pointer}
-.viewport{height:calc(100vh - 112px);overflow:auto;cursor:grab}.viewport.dragging{cursor:grabbing}.canvas{min-width:3000px;min-height:1900px;padding:90px 100px;transform-origin:top left}
-.tree{display:flex;flex-direction:column;align-items:center;gap:70px}.generation{display:flex;justify-content:center;gap:30px}.person{width:150px;text-align:center;position:relative}.photo{width:108px;height:108px;margin:auto;border-radius:50%;border:1px solid #bba98b;background:linear-gradient(145deg,#e2dccf,#c1b6a1);position:relative;box-shadow:0 9px 22px #493a2815}.photo:before{content:"";position:absolute;left:40%;top:24%;width:21%;height:21%;border-radius:50%;background:#8e8575aa}.photo:after{content:"";position:absolute;left:27%;bottom:11%;width:46%;height:42%;border-radius:50% 50% 42% 42%;background:#8e857566}
-.name{font:400 15px/1.25 Georgia,serif;margin-top:11px;min-height:38px}.years{font-size:11px;color:var(--muted);letter-spacing:.08em;margin-top:3px}.relation{font-size:8px;text-transform:uppercase;letter-spacing:.16em;color:#9a8768;height:13px;margin-bottom:5px}
-.root .person{width:190px}.root .photo{width:145px;height:145px}.root .name{font-size:20px}
-.family{position:relative;padding-top:68px}.family:before{content:"";position:absolute;top:0;left:50%;height:68px;border-left:1px solid var(--line)}
-.children{display:flex;gap:26px;justify-content:center;position:relative}.children:before{content:"";position:absolute;top:0;left:4%;right:4%;height:1px;background:var(--line)}.children .person:before{content:"";position:absolute;top:-68px;left:50%;height:68px;border-left:1px solid var(--line)}
-.nested{margin-top:78px}.nested>.family{padding-top:55px}.nested>.family:before{height:55px}.nested .children .person:before{top:-55px;height:55px}
+.viewport{height:calc(100vh - 112px);overflow:auto;cursor:grab}.viewport.dragging{cursor:grabbing}.canvas{min-width:3500px;min-height:2200px;padding:90px 100px;transform-origin:top left}
+
+/* Tree Structure Fixes */
+.tree{display:flex;flex-direction:column;align-items:center}
+ul.tree-node, ul.tree-node ul{list-style:none;margin:0;padding:0;display:flex;justify-content:center}
+ul.tree-node{position:relative;padding-top:40px}
+
+/* Connecting lines */
+ul.tree-node li{position:relative;text-align:center;list-style-type:none;padding:40px 10px 0 10px;display:flex;flex-direction:column;align-items:center}
+ul.tree-node li::before, ul.tree-node li::after{content:'';position:absolute;top:0;right:50%;border-top:1px solid var(--line);width:50%;height:40px}
+ul.tree-node li::after{left:50%;right:auto;border-left:1px solid var(--line)}
+ul.tree-node li:only-child::after, ul.tree-node li:only-child::before{display:none}
+ul.tree-node li:only-child{padding-top:0}
+ul.tree-node li:first-child::before{border:0}
+ul.tree-node li:last-child::after{border:0}
+ul.tree-node>li:not(:only-child):first-child::after{border-radius:5px 0 0 0}
+ul.tree-node>li:not(:only-child):last-child::before{border-right:1px solid var(--line);border-radius:0 5px 0 0}
+
+/* Vertical connector from parent down to children group */
+ul.tree-node ul{position:relative;padding-top:40px}
+ul.tree-node ul::before{content:'';position:absolute;top:0;left:50%;width:0;height:40px;border-left:1px solid var(--line)}
+
+.person{width:150px;text-align:center;position:relative}
+.photo{width:108px;height:108px;margin:auto;border-radius:50%;border:1px solid #bba98b;background:linear-gradient(145deg,#e2dccf,#c1b6a1);position:relative;box-shadow:0 9px 22px #493a2815}
+.photo:before{content:"";position:absolute;left:40%;top:24%;width:21%;height:21%;border-radius:50%;background:#8e8575aa}
+.photo:after{content:"";position:absolute;left:27%;bottom:11%;width:46%;height:42%;border-radius:50% 50% 42% 42%;background:#8e857566}
+.name{font:400 15px/1.25 Georgia,serif;margin-top:11px;min-height:38px}
+.years{font-size:11px;color:var(--muted);letter-spacing:.08em;margin-top:3px}
+.relation{font-size:9px;text-transform:uppercase;letter-spacing:.16em;color:#9a8768;margin-bottom:5px;font-weight:600}
+
+.root-person{width:190px}
+.root-person .photo{width:145px;height:145px}
+.root-person .name{font-size:20px}
+
 @media(max-width:700px){header{height:130px;padding:18px}.controls{left:18px;right:auto;bottom:16px}.viewport{height:calc(100vh - 130px)}.canvas{padding:60px 40px}}
 </style></head>
-<body><header><div class="kicker">Family Archive</div><h1>Prabhu Family Tree</h1><div class="subtitle">A living record of the Prabhu family</div><div class="controls"><button id="out">−</button><button id="reset">100%</button><button id="in">+</button><button id="fit">Fit tree</button></div></header>
-<main class="viewport" id="viewport"><div class="canvas" id="canvas"><div class="tree" id="tree"></div></div></main>
+<body>
+<header>
+  <div class="kicker">Family Archive</div>
+  <h1>Prabhu Family Tree</h1>
+  <div class="subtitle">A living record of the Prabhu family</div>
+  <div class="controls">
+    <button id="out">−</button>
+    <button id="reset">100%</button>
+    <button id="in">+</button>
+    <button id="fit">Fit tree</button>
+  </div>
+</header>
+<main class="viewport" id="viewport">
+  <div class="canvas" id="canvas">
+    <div class="tree" id="tree"></div>
+  </div>
+</main>
 <script src="family-data.js"></script>
 <script>
 const data = window.FAMILY_DATA || [], 
       byId = Object.fromEntries(data.map(p => [p.id, p])), 
-      tree = document.getElementById("tree");
+      treeContainer = document.getElementById("tree");
 
-function yrs(p) { return p.birth || p.death ? `${p.birth || "—"}–${p.death || "—"}` : "—"; }
-function rel(parent, child) { return child.gender === "female" ? "Daughter" : child.gender === "male" ? "Son" : "Child"; }
-function card(p, label = "") { 
-    let d = document.createElement("div"); 
-    d.className = "person"; 
-    d.innerHTML = `<div class="relation">${label}</div><div class="photo"></div><div class="name">${p.name}</div><div class="years">${yrs(p)}</div>`; 
-    return d; 
+function rel(parent, child) { 
+    return child.gender === "female" ? "Daughter" : child.gender === "male" ? "Son" : "Child"; 
 }
-function branch(parent) { 
-    let kids = (parent.children || []).map(x => byId[x]).filter(Boolean); 
-    if (!kids.length) return null; 
-    let f = document.createElement("div"); 
-    f.className = "family"; 
-    let row = document.createElement("div"); 
-    row.className = "children"; 
-    kids.forEach(k => row.appendChild(card(k, rel(parent, k)))); 
-    f.appendChild(row); 
-    kids.forEach(k => { 
-        if (k.children?.length) { 
-            let n = document.createElement("div"); 
-            n.className="nested"; 
-            n.appendChild(branch(k)); 
-            f.appendChild(n); 
-        } 
-    }); 
-    return f; 
+
+function createCard(p, label = "") {
+    let li = document.createElement("li");
+    let isRoot = (p.id === "padmanabh");
+    
+    let d = document.createElement("div");
+    d.className = isRoot ? "person root-person" : "person";
+    
+    let labelHtml = label ? `<div class="relation">${label}</div>` : `<div class="relation">&nbsp;</div>`;
+    d.innerHTML = `${labelHtml}<div class="photo"></div><div class="name">${p.name}</div><div class="years">—</div>`;
+    li.appendChild(d);
+
+    let kids = (p.children || []).map(x => byId[x]).filter(Boolean);
+    if (kids.length > 0) {
+        let ul = document.createElement("ul");
+        kids.forEach(k => {
+            ul.appendChild(createCard(k, rel(p, k)));
+        });
+        li.appendChild(ul);
+    }
+    return li;
 }
 
 let root = byId.padmanabh;
 if (root) {
-    let r = document.createElement("div"); 
-    r.className = "generation root"; 
-    r.appendChild(card(root)); 
-    tree.append(r, branch(root));
+    let rootUl = document.createElement("ul");
+    rootUl.className = "tree-node";
+    rootUl.appendChild(createCard(root, ""));
+    treeContainer.appendChild(rootUl);
 }
 
 let scale = 1, 
@@ -70,16 +110,11 @@ function apply() {
     document.getElementById("reset").textContent = Math.round(scale * 100) + "%"; 
 }
 
-const btnIn = document.getElementById("in"),
-      btnOut = document.getElementById("out"),
-      btnReset = document.getElementById("reset"),
-      btnFit = document.getElementById("fit");
-
-btnIn.onclick = () => { scale = Math.min(1.7, scale + .1); apply(); };
-btnOut.onclick = () => { scale = Math.max(.45, scale - .1); apply(); };
-btnReset.onclick = () => { scale = 1; apply(); };
-btnFit.onclick = () => { 
-    scale = Math.max(.45, Math.min(1, (vp.clientWidth - 30) / canvas.scrollWidth, (vp.clientHeight - 30) / canvas.scrollHeight)); 
+document.getElementById("in").onclick = () => { scale = Math.min(1.7, scale + 0.1); apply(); };
+document.getElementById("out").onclick = () => { scale = Math.max(0.45, scale - 0.1); apply(); };
+document.getElementById("reset").onclick = () => { scale = 1; apply(); };
+document.getElementById("fit").onclick = () => { 
+    scale = Math.max(0.45, Math.min(1, (vp.clientWidth - 30) / canvas.scrollWidth, (vp.clientHeight - 30) / canvas.scrollHeight)); 
     apply(); 
     vp.scrollTo(0, 0); 
 };
@@ -87,5 +122,5 @@ btnFit.onclick = () => {
 let drag = false, sx, sy, sl, st;
 vp.onpointerdown = e => { drag = true; vp.classList.add("dragging"); sx = e.clientX; sy = e.clientY; sl = vp.scrollLeft; st = vp.scrollTop; vp.setPointerCapture(e.pointerId); };
 vp.onpointermove = e => { if (drag) { vp.scrollLeft = sl - e.clientX + sx; vp.scrollTop = st - e.clientY + sy; } };
-vp.onpointerup = () => { drag = false; vp.classList.remove ? vp.classList.remove("dragging") : vp.classList.remove("dragging"); };
+vp.onpointerup = () => { drag = false; vp.classList.remove("dragging"); };
 </script></body></html>
