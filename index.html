@@ -8,27 +8,15 @@ header{height:112px;padding:25px 32px;border-bottom:1px solid #ded5c5;background
 .kicker{font-size:10px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--accent)}
 h1{font:400 clamp(28px,4vw,44px) Georgia,serif;margin:4px 0}.subtitle{font-size:12px;color:var(--muted)}
 .controls{position:absolute;right:28px;bottom:25px;display:flex;gap:6px}button{border:1px solid #d8cfbf;background:#fffdf8;border-radius:9px;padding:8px 11px;color:var(--ink);cursor:pointer}
-.viewport{height:calc(100vh - 112px);overflow:auto;cursor:grab}.viewport.dragging{cursor:grabbing}.canvas{min-width:3500px;min-height:2200px;padding:90px 100px;transform-origin:top left}
+.viewport{height:calc(100vh - 112px);overflow:auto;cursor:grab}.viewport.dragging{cursor:grabbing}.canvas{position:relative;min-width:4000px;min-height:2500px;padding:60px;transform-origin:top left}
 
-/* Tree Structure Fixes */
-.tree{display:flex;flex-direction:column;align-items:center}
-ul.tree-node, ul.tree-node ul{list-style:none;margin:0;padding:0;display:flex;justify-content:center}
-ul.tree-node{position:relative;padding-top:40px}
+/* SVG Line Layer */
+#tree-svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1}
+#tree-svg path{fill:none;stroke:var(--line);stroke-width:1.5px}
 
-/* Connecting lines */
-ul.tree-node li{position:relative;text-align:center;list-style-type:none;padding:40px 10px 0 10px;display:flex;flex-direction:column;align-items:center}
-ul.tree-node li::before, ul.tree-node li::after{content:'';position:absolute;top:0;right:50%;border-top:1px solid var(--line);width:50%;height:40px}
-ul.tree-node li::after{left:50%;right:auto;border-left:1px solid var(--line)}
-ul.tree-node li:only-child::after, ul.tree-node li:only-child::before{display:none}
-ul.tree-node li:only-child{padding-top:0}
-ul.tree-node li:first-child::before{border:0}
-ul.tree-node li:last-child::after{border:0}
-ul.tree-node>li:not(:only-child):first-child::after{border-radius:5px 0 0 0}
-ul.tree-node>li:not(:only-child):last-child::before{border-right:1px solid var(--line);border-radius:0 5px 0 0}
-
-/* Vertical connector from parent down to children group */
-ul.tree-node ul{position:relative;padding-top:40px}
-ul.tree-node ul::before{content:'';position:absolute;top:0;left:50%;width:0;height:40px;border-left:1px solid var(--line)}
+/* Tree Generation Layout */
+.tree-container{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;gap:80px}
+.generation{display:flex;justify-content:center;gap:40px;width:100%}
 
 .person{width:150px;text-align:center;position:relative}
 .photo{width:108px;height:108px;margin:auto;border-radius:50%;border:1px solid #bba98b;background:linear-gradient(145deg,#e2dccf,#c1b6a1);position:relative;box-shadow:0 9px 22px #493a2815}
@@ -42,7 +30,7 @@ ul.tree-node ul::before{content:'';position:absolute;top:0;left:50%;width:0;heig
 .root-person .photo{width:145px;height:145px}
 .root-person .name{font-size:20px}
 
-@media(max-width:700px){header{height:130px;padding:18px}.controls{left:18px;right:auto;bottom:16px}.viewport{height:calc(100vh - 130px)}.canvas{padding:60px 40px}}
+@media(max-width:700px){header{height:130px;padding:18px}.controls{left:18px;right:auto;bottom:16px}.viewport{height:calc(100vh - 130px)}.canvas{padding:40px}}
 </style></head>
 <body>
 <header>
@@ -58,48 +46,108 @@ ul.tree-node ul::before{content:'';position:absolute;top:0;left:50%;width:0;heig
 </header>
 <main class="viewport" id="viewport">
   <div class="canvas" id="canvas">
-    <div class="tree" id="tree"></div>
+    <svg id="tree-svg"></svg>
+    <div class="tree-container" id="tree"></div>
   </div>
 </main>
 <script src="family-data.js"></script>
 <script>
 const data = window.FAMILY_DATA || [], 
       byId = Object.fromEntries(data.map(p => [p.id, p])), 
-      treeContainer = document.getElementById("tree");
+      treeContainer = document.getElementById("tree"),
+      svg = document.getElementById("tree-svg");
 
 function rel(parent, child) { 
     return child.gender === "female" ? "Daughter" : child.gender === "male" ? "Son" : "Child"; 
 }
 
-function createCard(p, label = "") {
-    let li = document.createElement("li");
-    let isRoot = (p.id === "padmanabh");
-    
-    let d = document.createElement("div");
-    d.className = isRoot ? "person root-person" : "person";
-    
-    let labelHtml = label ? `<div class="relation">${label}</div>` : `<div class="relation">&nbsp;</div>`;
-    d.innerHTML = `${labelHtml}<div class="photo"></div><div class="name">${p.name}</div><div class="years">—</div>`;
-    li.appendChild(d);
+// Build generations by hierarchy level
+function buildTreeData(rootId) {
+    let levels = [];
+    let queue = [{id: rootId, depth: 0}];
+    let mapByDepth = {};
 
-    let kids = (p.children || []).map(x => byId[x]).filter(Boolean);
-    if (kids.length > 0) {
-        let ul = document.createElement("ul");
+    while(queue.length > 0) {
+        let {id, depth} = queue.shift();
+        let p = byId[id];
+        if(!p) continue;
+
+        if(!mapByDepth[depth]) mapByDepth[depth] = [];
+        mapByDepth[depth].push(p);
+
+        let kids = (p.children || []).map(x => byId[x]).filter(Boolean);
         kids.forEach(k => {
-            ul.appendChild(createCard(k, rel(p, k)));
+            queue.push({id: k.id, depth: depth + 1});
         });
-        li.appendChild(ul);
     }
-    return li;
+    return mapByDepth;
 }
 
-let root = byId.padmanabh;
-if (root) {
-    let rootUl = document.createElement("ul");
-    rootUl.className = "tree-node";
-    rootUl.appendChild(createCard(root, ""));
-    treeContainer.appendChild(rootUl);
+function renderTree() {
+    treeContainer.innerHTML = "";
+    svg.innerHTML = "";
+    
+    let levels = buildTreeData("padmanabh");
+    let cardElements = {};
+
+    // Render generation rows
+    Object.keys(levels).sort((a,b)=>a-b).forEach(depth => {
+        let genDiv = document.createElement("div");
+        genDiv.className = depth == 0 ? "generation root-generation" : "generation";
+        
+        levels[depth].forEach(p => {
+            let isRoot = (p.id === "padmanabh");
+            let d = document.createElement("div");
+            d.className = isRoot ? "person root-person" : "person";
+            d.dataset.id = p.id;
+            
+            // Find parent to determine label
+            let label = "";
+            if(!isRoot) {
+                // Find who lists this person as a child
+                let parentObj = data.find(item => item.children && item.children.includes(p.id));
+                if(parentObj) label = rel(parentObj, p);
+            }
+
+            d.innerHTML = `<div class="relation">${label || "&nbsp;"}</div><div class="photo"></div><div class="name">${p.name}</div><div class="years">—</div>`;
+            genDiv.appendChild(d);
+            cardElements[p.id] = d;
+        });
+        treeContainer.appendChild(genDiv);
+    });
+
+    // Draw connecting lines using SVG after DOM is painted
+    setTimeout(() => {
+        let canvasRect = canvas.getBoundingClientRect();
+        
+        data.forEach(parent => {
+            if(!parent.children || parent.children.length === 0) return;
+            let parentEl = cardElements[parent.id];
+            if(!parentEl) return;
+
+            let pRect = parentEl.getBoundingClientRect();
+            let pX = (pRect.left + pRect.width / 2 - canvasRect.left) / scale;
+            let pY = (pRect.bottom - canvasRect.top) / scale;
+
+            parent.children.forEach(childId => {
+                let childEl = cardElements[childId];
+                if(!childEl) return;
+
+                let cRect = childEl.getBoundingClientRect();
+                let cX = (cRect.left + cRect.width / 2 - canvasRect.left) / scale;
+                let cY = (cRect.top - canvasRect.top) / scale;
+
+                let midY = pY + (cY - pY) / 2;
+                
+                let path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                path.setAttribute("d", `M ${pX} ${pY} V ${midY} H ${cX} V ${cY}`);
+                svg.appendChild(path);
+            });
+        });
+    }, 50);
 }
+
+renderTree();
 
 let scale = 1, 
     canvas = document.getElementById("canvas"), 
@@ -108,6 +156,7 @@ let scale = 1,
 function apply() { 
     canvas.style.transform = `scale(${scale})`; 
     document.getElementById("reset").textContent = Math.round(scale * 100) + "%"; 
+    renderTree(); // Redraw SVG lines on scale change
 }
 
 document.getElementById("in").onclick = () => { scale = Math.min(1.7, scale + 0.1); apply(); };
