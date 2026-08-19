@@ -87,5 +87,5 @@ btnFit.onclick = () => {
 let drag = false, sx, sy, sl, st;
 vp.onpointerdown = e => { drag = true; vp.classList.add("dragging"); sx = e.clientX; sy = e.clientY; sl = vp.scrollLeft; st = vp.scrollTop; vp.setPointerCapture(e.pointerId); };
 vp.onpointermove = e => { if (drag) { vp.scrollLeft = sl - e.clientX + sx; vp.scrollTop = st - e.clientY + sy; } };
-vp.onpointerup = () => { drag = false; vp.classList.resmove ? vp.classList.remove("dragging") : vp.classList.remove("dragging"); };
+vp.onpointerup = () => { drag = false; vp.classList.remove ? vp.classList.remove("dragging") : vp.classList.remove("dragging"); };
 </script></body></html>
