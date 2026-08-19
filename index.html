@@ -10,11 +10,9 @@ h1{font:400 clamp(28px,4vw,44px) Georgia,serif;margin:4px 0}.subtitle{font-size:
 .controls{position:absolute;right:28px;bottom:25px;display:flex;gap:6px}button{border:1px solid #d8cfbf;background:#fffdf8;border-radius:9px;padding:8px 11px;color:var(--ink);cursor:pointer}
 .viewport{height:calc(100vh - 112px);overflow:auto;cursor:grab}.viewport.dragging{cursor:grabbing}.canvas{position:relative;min-width:4000px;min-height:2500px;padding:60px;transform-origin:top left}
 
-/* SVG Line Layer */
 #tree-svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1}
 #tree-svg path{fill:none;stroke:var(--line);stroke-width:1.5px}
 
-/* Tree Generation Layout */
 .tree-container{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;gap:80px}
 .generation{display:flex;justify-content:center;gap:40px;width:100%}
 
@@ -61,11 +59,9 @@ function rel(parent, child) {
     return child.gender === "female" ? "Daughter" : child.gender === "male" ? "Son" : "Child"; 
 }
 
-// Build generations by hierarchy level
 function buildTreeData(rootId) {
-    let levels = [];
-    let queue = [{id: rootId, depth: 0}];
     let mapByDepth = {};
+    let queue = [{id: rootId, depth: 0}];
 
     while(queue.length > 0) {
         let {id, depth} = queue.shift();
@@ -90,7 +86,6 @@ function renderTree() {
     let levels = buildTreeData("padmanabh");
     let cardElements = {};
 
-    // Render generation rows
     Object.keys(levels).sort((a,b)=>a-b).forEach(depth => {
         let genDiv = document.createElement("div");
         genDiv.className = depth == 0 ? "generation root-generation" : "generation";
@@ -101,10 +96,8 @@ function renderTree() {
             d.className = isRoot ? "person root-person" : "person";
             d.dataset.id = p.id;
             
-            // Find parent to determine label
             let label = "";
             if(!isRoot) {
-                // Find who lists this person as a child
                 let parentObj = data.find(item => item.children && item.children.includes(p.id));
                 if(parentObj) label = rel(parentObj, p);
             }
@@ -116,7 +109,6 @@ function renderTree() {
         treeContainer.appendChild(genDiv);
     });
 
-    // Draw connecting lines using SVG after DOM is painted
     setTimeout(() => {
         let canvasRect = canvas.getBoundingClientRect();
         
@@ -156,7 +148,7 @@ let scale = 1,
 function apply() { 
     canvas.style.transform = `scale(${scale})`; 
     document.getElementById("reset").textContent = Math.round(scale * 100) + "%"; 
-    renderTree(); // Redraw SVG lines on scale change
+    renderTree(); 
 }
 
 document.getElementById("in").onclick = () => { scale = Math.min(1.7, scale + 0.1); apply(); };
