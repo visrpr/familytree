@@ -30,7 +30,7 @@ function card(p,label=""){let d=document.createElement("div");d.className="perso
 function branch(parent){let kids=(parent.children||[]).map(x=>byId[x]).filter(Boolean);if(!kids.length)return null;let f=document.createElement("div");f.className="family";let row=document.createElement("div");row.className="children";kids.forEach(k=>row.appendChild(card(k,rel(parent,k))));f.appendChild(row);kids.forEach(k=>{if(k.children?.length){let n=document.createElement("div");n.className="nested";n.appendChild(branch(k));f.appendChild(n)}});return f}
 let root=byId.padmanabh;let r=document.createElement("div");r.className="generation root";r.appendChild(card(root));tree.append(r,branch(root));
 let scale=1,canvas=document.getElementById("canvas"),vp=document.getElementById("viewport");function apply(){canvas.style.transform=`scale(${scale})`;document.getElementById("reset").textContent=Math.round(scale*100)+"%"}
-document.getElementById("zoomIn").addEventListener("click", function () {
+document.getElementById("zoomin").addEventListener("click", function () {
   scale = Math.min(1.7, scale + 0.1);
   apply();
 });
