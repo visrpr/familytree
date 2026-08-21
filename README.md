@@ -1,10 +1,10 @@
-# 🌳 Family Tree Web Project
+# 🌳 Family Tree Web Project 🌳
 
 Welcome to the repository for our family history website! This project is a digital space dedicated to preserving our family’s lineage, sharing historical photos, and connecting generations.
 
-## 🚀 Live Demo
+## 🚀 Live
 You can view the live website hosted on GitHub Pages here:  
-👉 [https://<your-username>.github.io/<repository-name>/](https://<your-username>.github.io/<repository-name>/)
+👉 [https://<your-username>.github.io/<repository-name>/](https://visrpr.github.io/familytree/)
 
 ---
 
