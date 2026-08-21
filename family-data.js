@@ -6,6 +6,8 @@
 	- name: name shown on the family tree and detail page.
 	- gender: male, female, or unknown.
 	- birth / death: use four-digit years, or an empty string when unknown.
+	- birth / death: use four-digit years, or an empty string when unknown.
+	- marriage / divorce or marriageYear / divorceYear: optional four-digit timeline event years.
 	- spouse: id of the spouse record. Omit it to show a Spouse placeholder.
 	- children: child ids in eldest-to-youngest order, from left to right.
 	- photos: optional array of image URLs for the detail-page carousel.

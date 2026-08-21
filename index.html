@@ -6,7 +6,7 @@
 <title>Prabhu Family Tree</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Aleo:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Aleo:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@500;600&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#f0ebde;
@@ -28,10 +28,22 @@
   --gen3:#5e8a82;
   --gen4:#6b7a8a;
   --gen5:#7a5e74;
+  --teal:#2f716c;
+  --teal-deep:#20524f;
+  --timeline-bg:#372a23;
+  --timeline-surface:#483a31;
+  --timeline-line:#b89055;
+  --birth:#d6a14a;
+  --death:#d8756f;
+  --marriage:#7fc3b1;
+  --divorce:#db856c;
+  --timeline-text:#f7ebd5;
+  --timeline-muted:#d0bfa8;
 }
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background-color:var(--bg);background-image:url('https://i.postimg.cc/Qtq321VW/backdrop.webp?v=2');background-repeat:repeat;background-size:125px 125px;background-attachment:fixed;color:var(--ink);font-family:'Inter',-apple-system,'Segoe UI',sans-serif}
 body{overflow:hidden}
+.invocation{height:25px;display:flex;align-items:center;justify-content:center;background:#372a23;color:#f7ebd5;font:600 12px/1 'Noto Sans Devanagari',sans-serif;letter-spacing:0}
 
 header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);background:repeating-linear-gradient(135deg,rgba(255,255,255,.08) 0,rgba(255,255,255,.08) 1px,transparent 1px,transparent 7px),linear-gradient(180deg,rgba(255,252,246,.97),rgba(232,220,197,.94));box-shadow:0 8px 22px rgba(58,42,22,.1),inset 0 1px rgba(255,255,255,.72),inset 0 -1px rgba(110,84,38,.12);backdrop-filter:blur(12px);position:relative;z-index:6}
 .header-top{display:flex;justify-content:space-between;align-items:center;gap:24px;max-width:1440px;margin:0 auto}
@@ -94,18 +106,48 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
 .initials{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#fff;font:600 24px 'Inter',sans-serif;background:var(--brass)}
 .initials.gen0{background:var(--gen0)}.initials.gen1{background:var(--gen1)}.initials.gen2{background:var(--gen2)}.initials.gen3{background:var(--gen3)}.initials.gen4{background:var(--gen4)}.initials.gen5{background:var(--gen5)}
 .person.unknown .initials{background:var(--unknown-bg);color:var(--unknown-text)}
+.placeholder-illustration{width:100%;height:100%;object-fit:cover;display:block;background:var(--unknown-bg)}
 .name{font:600 14.5px/1.24 'Aleo',Georgia,serif;display:-webkit-box;line-clamp:2;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--ink)}
 .years{font:11px 'Inter',sans-serif;color:var(--muted);letter-spacing:.02em;margin-top:4px}
 .badge.founder{position:absolute;left:50%;top:-11px;transform:translateX(-50%);background:var(--ink);color:#fbf6ea;font:600 8.5px 'Inter',sans-serif;text-transform:uppercase;letter-spacing:.12em;padding:3px 10px;border-radius:20px;white-space:nowrap}
 
-.legend-toggle{position:relative;flex:0 0 36px;width:36px;height:36px;border:1px solid var(--border);border-radius:12px;background:var(--card);color:var(--brass-deep);font:600 16px 'Inter',sans-serif;cursor:pointer;box-shadow:0 5px 16px rgba(50,38,14,.16);z-index:9}
-.legend-toggle:hover{border-color:var(--brass);color:var(--brass)}
-.legend{position:fixed;left:0;top:78px;transform:translateX(-100%);background:var(--card);border:1px solid var(--border);border-left:0;border-radius:0 12px 12px 0;padding:12px 14px;font:11px 'Inter',sans-serif;color:var(--ink-soft);box-shadow:0 8px 22px rgba(50,38,14,.16);z-index:8;max-width:170px;max-height:calc(100vh - 92px);overflow-y:auto;transition:transform .2s ease}
+.legend-toggle{position:relative;flex:0 0 36px;width:36px;height:36px;border:1px solid rgba(47,113,108,.45);border-radius:12px;background:var(--card);color:var(--teal-deep);font:600 16px 'Inter',sans-serif;cursor:pointer;box-shadow:0 5px 16px rgba(50,38,14,.16);z-index:9}
+.legend-toggle:hover{border-color:var(--teal);color:var(--teal)}
+.legend-backdrop{position:fixed;inset:0;background:rgba(42,35,24,.24);opacity:0;pointer-events:none;transition:opacity .2s ease;z-index:7}
+.legend-backdrop.open{opacity:1;pointer-events:auto}
+.legend{position:fixed;left:0;top:0;bottom:0;width:min(320px,88vw);transform:translateX(-100%);background:var(--card);border-right:1px solid var(--border);padding:28px 20px;font:11px 'Inter',sans-serif;color:var(--ink-soft);box-shadow:12px 0 32px rgba(50,38,14,.18);z-index:8;overflow-y:auto;transition:transform .25s ease}
 .legend.open{transform:translateX(0)}
+.menu-heading{font:600 22px/1.1 'Aleo',Georgia,serif;color:var(--ink);margin:0 0 22px}
+.menu-nav{display:grid;gap:6px;margin-bottom:26px}
+.menu-option{width:100%;border:1px solid transparent;border-radius:10px;background:transparent;padding:12px 13px;text-align:left;color:var(--ink-soft);cursor:pointer;font:600 13px 'Inter',sans-serif}
+.menu-option:hover,.menu-option.active{border-color:rgba(47,113,108,.32);background:#dcebe7;color:var(--teal-deep)}
+.legend-content{border-top:1px solid var(--border);padding-top:18px}
 .legend-title{font:600 9px 'Inter',sans-serif;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);margin-bottom:6px}
 .legend-row{display:flex;align-items:center;gap:7px;margin-top:4px}
 .legend .dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0}
 .legend .unknown-dot{background:var(--unknown-bg);border:1.5px dashed var(--unknown-text);box-sizing:border-box}
+.timeline-view,.facts-view{display:none;height:calc(100vh - 78px);overflow:auto;padding:38px 42px;background:var(--timeline-bg)}
+.timeline-view.open,.facts-view.open{display:block}
+.view-heading{max-width:1200px;margin:0 auto 8px;font:600 32px/1.1 'Aleo',Georgia,serif;color:var(--timeline-text)}
+.view-subtitle{max-width:1200px;margin:0 auto 30px;color:var(--timeline-muted);font-size:12px}
+.timeline-scroll{max-width:1200px;margin:0 auto;overflow-x:auto;padding:70px 24px 50px;border:1px solid rgba(216,161,74,.3);border-radius:16px;background:var(--timeline-surface);box-shadow:0 10px 24px rgba(20,12,8,.25);cursor:grab}
+.timeline-scroll:active{cursor:grabbing}
+.timeline-track{position:relative;display:flex;align-items:flex-start;gap:34px;width:max-content;min-width:100%;padding:0 20px}
+.timeline-track:before{content:"";position:absolute;left:0;right:0;top:10px;height:3px;background:var(--timeline-line)}
+.timeline-event{position:relative;width:155px;padding-top:28px;text-align:center;flex:0 0 155px}
+.timeline-event:before{content:"";position:absolute;top:4px;left:50%;width:13px;height:13px;transform:translateX(-50%);border:3px solid var(--timeline-surface);border-radius:50%;background:var(--marriage);box-shadow:0 0 0 1px var(--marriage)}
+.timeline-event.event-birth:before{background:var(--birth);box-shadow:0 0 0 1px var(--birth)}
+.timeline-event.event-death:before{background:var(--death);box-shadow:0 0 0 1px var(--death)}
+.timeline-event.event-marriage:before{background:var(--marriage);box-shadow:0 0 0 1px var(--marriage)}
+.timeline-event.event-divorce:before{background:var(--divorce);box-shadow:0 0 0 1px var(--divorce)}
+.timeline-year{font:700 18px 'Aleo',Georgia,serif;color:var(--timeline-text)}
+.timeline-type{margin-top:4px;font:600 9px 'Inter',sans-serif;text-transform:uppercase;letter-spacing:.12em;color:var(--timeline-muted)}
+.timeline-name{margin-top:8px;font:600 13px/1.25 'Aleo',Georgia,serif;color:var(--timeline-text)}
+.timeline-empty{padding:30px;color:var(--timeline-muted);text-align:center}
+.facts-grid{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}
+.fact-card{background:var(--timeline-surface);border:1px solid rgba(216,161,74,.25);border-radius:12px;padding:20px;box-shadow:0 5px 14px rgba(20,12,8,.22)}
+.fact-value{font:600 30px/1 'Aleo',Georgia,serif;color:var(--birth)}
+.fact-label{margin-top:9px;color:var(--timeline-muted);font-size:12px;line-height:1.4}
 
 .details-view{position:fixed;inset:0;display:none;align-items:stretch;background:rgba(42,35,24,.1);z-index:20;pointer-events:none}
 .details-view.open{display:flex;pointer-events:auto}
@@ -177,8 +219,9 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
   .title-block{justify-content:space-between}
   .header-actions{width:100%}
   .search-wrap{flex:1;width:auto}
-  .viewport{height:calc(100vh - 112px)}
-  .legend{top:112px;padding:10px 12px;max-width:150px;max-height:calc(100vh - 126px)}
+  .viewport{height:calc(100vh - 137px)}
+  .legend{padding:24px 16px}
+  .timeline-view,.facts-view{height:calc(100vh - 137px);padding:26px 16px}
   .controls{gap:6px}
   .controls button{padding:6px 10px;font-size:11.5px}
 }
@@ -193,8 +236,10 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
   #searchInput{padding:9px 11px;font-size:12px}
   .controls button{min-width:40px;min-height:38px;padding:6px 9px}
   .zoom-slider{width:72px}
-  .viewport{height:calc(100vh - 108px);-webkit-overflow-scrolling:touch}
-  .legend{top:108px;max-width:min(170px,calc(100vw - 16px));max-height:calc(100vh - 122px)}
+  .viewport{height:calc(100vh - 133px);-webkit-overflow-scrolling:touch}
+  .legend{width:min(320px,92vw);padding:22px 14px}
+  .timeline-view,.facts-view{height:calc(100vh - 133px);padding:22px 12px}
+  .view-heading{font-size:27px}
   .relation-label{font-size:8px;letter-spacing:.1em;padding:0 6px}
   .details-shell{max-height:88vh;padding:12px 12px 24px;border-radius:16px 16px 0 0}
   .details-top{align-items:flex-start;gap:10px}
@@ -215,10 +260,11 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
 </style>
 </head>
 <body>
+<div class="invocation" lang="hi">श्री गणेशाय नमः</div>
 <header>
   <div class="header-top">
     <div class="title-block">
-      <button class="legend-toggle" id="legendToggle" type="button" aria-label="Open legend" aria-expanded="false">›</button>
+      <button class="legend-toggle" id="legendToggle" type="button" aria-label="Open menu" aria-expanded="false">☰</button>
       <div class="title-copy">
         <div class="kicker">Prabhu Family Tree</div>
         <div class="subtitle"><span id="stats"></span></div>
@@ -238,13 +284,32 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
     </div>
   </div>
 </header>
+<div class="legend-backdrop" id="legendBackdrop"></div>
 <main class="viewport" id="viewport">
   <div class="canvas" id="canvas">
     <svg id="connectors" aria-hidden="true"></svg>
     <div id="nodesLayer"></div>
   </div>
 </main>
-<aside class="legend" id="legend" aria-hidden="true"></aside>
+<aside class="legend" id="legend" aria-hidden="true">
+  <h2 class="menu-heading">Explore the family</h2>
+  <nav class="menu-nav" aria-label="Family tree views">
+    <button class="menu-option active" data-view="tree" type="button">Legend</button>
+    <button class="menu-option" data-view="timeline" type="button">Timeline Mode</button>
+    <button class="menu-option" data-view="facts" type="button">Fun Facts</button>
+  </nav>
+  <div class="legend-content" id="legendContent"></div>
+</aside>
+<section class="timeline-view" id="timelineView" aria-hidden="true">
+  <h1 class="view-heading">Family timeline</h1>
+  <p class="view-subtitle">A chronological view of recorded family events.</p>
+  <div class="timeline-scroll"><div class="timeline-track" id="timelineTrack"></div></div>
+</section>
+<section class="facts-view" id="factsView" aria-hidden="true">
+  <h1 class="view-heading">Fun facts</h1>
+  <p class="view-subtitle">A few discoveries from the family data.</p>
+  <div class="facts-grid" id="factsGrid"></div>
+</section>
 <section class="details-view" id="detailsView" aria-hidden="true">
   <div class="details-shell">
     <div class="details-top">
@@ -299,7 +364,7 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
 (function(){
   'use strict';
   // Replace this with your FormSubmit address. Submitters do not need an account.
-  var FORM_ENDPOINT = 'https://formsubmit.co/ajax/REPLACE_WITH_YOUR_EMAIL';
+  var FORM_ENDPOINT = 'https://formsubmit.co/ajax/visrpr@gmail.com';
   var RAW = window.FAMILY_DATA || [];
   var byId = Object.fromEntries(RAW.map(function(p){ return [p.id, p]; }));
   var ROOT_ID = 'padmanabh';
@@ -311,6 +376,10 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
   var zoomSlider = document.getElementById('zoomSlider');
   var legend = document.getElementById('legend');
   var legendToggle = document.getElementById('legendToggle');
+  var legendBackdrop = document.getElementById('legendBackdrop');
+  var legendContent = document.getElementById('legendContent');
+  var timelineView = document.getElementById('timelineView');
+  var factsView = document.getElementById('factsView');
   var detailsView = document.getElementById('detailsView');
   var detailsGallery = document.getElementById('detailsGallery');
   var detailsShell = document.querySelector('.details-shell');
@@ -338,19 +407,41 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
   legendToggle.addEventListener('click', function(e){
     e.stopPropagation();
     var isOpen = legend.classList.toggle('open');
+    legendBackdrop.classList.toggle('open', isOpen);
     legendToggle.setAttribute('aria-expanded', String(isOpen));
-    legendToggle.setAttribute('aria-label', isOpen ? 'Close legend' : 'Open legend');
-    legendToggle.textContent = isOpen ? '‹' : '›';
+    legendToggle.setAttribute('aria-label', isOpen ? 'Close menu' : 'Open menu');
     legend.setAttribute('aria-hidden', String(!isOpen));
   });
+  legendBackdrop.addEventListener('click', closeMenu);
   document.addEventListener('click', function(e){
-    if(!e.target.closest('.legend') && !e.target.closest('.legend-toggle')){
-      legend.classList.remove('open');
-      legendToggle.setAttribute('aria-expanded', 'false');
-      legendToggle.setAttribute('aria-label', 'Open legend');
-      legendToggle.textContent = '›';
-      legend.setAttribute('aria-hidden', 'true');
+    if(!e.target.closest('.legend') && !e.target.closest('.legend-toggle') && !e.target.closest('.legend-backdrop')){
+      closeMenu();
     }
+  });
+  function closeMenu(){
+    legend.classList.remove('open');
+    legendBackdrop.classList.remove('open');
+    legendToggle.setAttribute('aria-expanded', 'false');
+    legendToggle.setAttribute('aria-label', 'Open menu');
+    legend.setAttribute('aria-hidden', 'true');
+  }
+  function showView(viewName){
+    var isTree = viewName === 'tree';
+    document.getElementById('viewport').style.display = isTree ? '' : 'none';
+    timelineView.classList.toggle('open', viewName === 'timeline');
+    factsView.classList.toggle('open', viewName === 'facts');
+    timelineView.setAttribute('aria-hidden', String(viewName !== 'timeline'));
+    factsView.setAttribute('aria-hidden', String(viewName !== 'facts'));
+    Array.prototype.forEach.call(document.querySelectorAll('.menu-option'), function(option){
+      option.classList.toggle('active', option.dataset.view === viewName);
+    });
+    closeMenu();
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('.menu-option'), function(option){
+    option.addEventListener('click', function(){ showView(option.dataset.view); });
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && legend.classList.contains('open')) closeMenu();
   });
 
   var parentOf = {};
@@ -372,6 +463,7 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
   var cardEls = {};
   var canvasWidth = 0;
   var canvasHeight = 0;
+  var focusAnimationFrame = null;
 
   function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function initials(name){
@@ -442,9 +534,38 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
 
   function makeAvatar(p, genDepth){
     var g = 'gen' + Math.max(0, Math.min(genDepth||0, 5));
-    var initialsHtml = '<div class="initials '+g+'"'+(p.photo?' style="display:none"':'')+'>'+esc(initials(p.name))+'</div>';
-    var imgHtml = p.photo ? '<img src="'+esc(p.photo)+'" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';">' : '';
-    return '<div class="photo" aria-hidden="true">'+imgHtml+initialsHtml+'</div>';
+    var photoUrl = p.photo || (Array.isArray(p.photos) ? p.photos.filter(Boolean)[0] : '');
+    var hasPhoto = !!photoUrl;
+    var fallbackHtml = '<div class="initials '+g+'" style="display:none">'+esc(initials(p.name))+'</div>';
+    var imgSrc = hasPhoto ? photoUrl : illustrationUrl(p);
+    var imgClass = hasPhoto ? '' : ' class="placeholder-illustration"';
+    var onError = hasPhoto ? 'this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';' : 'this.onerror=null;this.src=\''+esc(illustrationFallbackUrl(p))+'\';';
+    var imgHtml = '<img'+imgClass+' src="'+esc(imgSrc)+'" alt="" onerror="'+onError+'">';
+    return '<div class="photo" aria-hidden="true">'+imgHtml+fallbackHtml+'</div>';
+  }
+
+  function placeholderType(p){
+    var hasChildren = (p.children || []).some(function(childId){ return byId[childId]; });
+    var hasGrandchildren = (p.children || []).some(function(childId){
+      var child = byId[childId];
+      return child && (child.children || []).some(function(grandchildId){ return byId[grandchildId]; });
+    });
+    if(hasGrandchildren) return p.gender === 'female' ? 'grandma' : p.gender === 'male' ? 'grandpa' : 'grandparent';
+    if(hasChildren || p.placeholder) return p.gender === 'female' ? 'mother' : p.gender === 'male' ? 'father' : 'adult';
+    return p.gender === 'female' ? 'daughter' : p.gender === 'male' ? 'son' : 'child';
+  }
+  function placeholderLabel(p){
+    return {grandpa:'Grandpa',grandma:'Grandma',grandparent:'Grandparent',father:'Father',mother:'Mother',adult:'Adult', 'teen-boy':'Teenager', 'teen-girl':'Teenager',teen:'Teenager',son:'Son',daughter:'Daughter',child:'Child'}[placeholderType(p)];
+  }
+  function illustrationUrl(p){
+    var seed = encodeURIComponent(p.id + '-' + placeholderType(p));
+    return 'https://api.dicebear.com/10.x/personas/svg?seed='+seed+'&backgroundColor=e3d2b4&skinColor=d8b48c,c19a70,a37e58,8f6f4e&hairColor=4a3526,5f4531,7a5c43&facialHairColor=4a3526,5f4531&clothingColor=8a6a48,9c7c58,6f5433&hairVariant=bald,balding,bobBangs,bobCut,buzzcut,curly,curlyHighTop,extraLong,fade,long,mohawk,shortCombover,shortComboverChops,sideShave&mouthVariant=bigSmile,frown,smile,smirk,surprise';
+  }
+  function illustrationFallbackUrl(p){
+    var type = placeholderType(p), hair = type === 'grandpa' || type === 'grandparent' ? '#d6c4a8' : '#4a3526';
+    var shirt = type === 'daughter' || type === 'mother' || type === 'grandma' ? '#8a6a48' : '#6f5433';
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 104 104"><rect width="104" height="104" rx="52" fill="#e3d2b4"/><path d="M25 94c3-20 14-29 27-29s24 9 27 29" fill="'+shirt+'"/><circle cx="52" cy="43" r="20" fill="#c19a70"/><path d="M32 40c1-18 39-25 42 2-9-7-27-8-42-2z" fill="'+hair+'"/><circle cx="45" cy="44" r="2" fill="#2a2318"/><circle cx="59" cy="44" r="2" fill="#2a2318"/><path d="M45 54c5 4 10 4 15 0" fill="none" stroke="#2a2318" stroke-width="2" stroke-linecap="round"/></svg>';
+    return 'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(svg);
   }
 
   function displayValue(value){ return value || 'Not provided'; }
@@ -482,6 +603,17 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
   }
 
   function makeFallbackAvatar(p){
+    if(!p.photo){
+      var illustration = document.createElement('img');
+      illustration.className = 'placeholder-illustration';
+      illustration.alt = placeholderLabel(p);
+      illustration.src = illustrationUrl(p);
+      illustration.onerror = function(){ illustration.onerror = null; illustration.src = illustrationFallbackUrl(p); };
+      return illustration;
+    }
+    return makeInitialsFallback(p);
+  }
+  function makeInitialsFallback(p){
     var fallback = document.createElement('div');
     fallback.className = 'initials gen' + Math.max(0, Math.min(structDepth[p.id] || 0, 5));
     fallback.textContent = initials(p.name);
@@ -726,7 +858,9 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
         var parentBottomY = top + (hasSpouse ? marriageHeight : card.offsetHeight);
         kids.forEach(function(cid){
           var kp = positions[cid];
-          var kx = kp.x+PAD, ky = kp.y+PAD;
+          var childHasSpouse = !!partnerFor(byId[cid]);
+          var childPrimaryLeft = childHasSpouse ? kp.x - (CARD_W + SPOUSE_GAP/2) : kp.x - CARD_W/2;
+          var kx = childPrimaryLeft + PAD + CARD_W/2, ky = kp.y + PAD;
           var path = document.createElementNS('http://www.w3.org/2000/svg','path');
           path.setAttribute('d', curvePath(x+PAD, parentBottomY, kx, ky));
           path.setAttribute('class','edge');
@@ -782,6 +916,7 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
   function focusAndZoom(id){
     focusedId = id;
     applyFocus();
+    if(focusAnimationFrame) cancelAnimationFrame(focusAnimationFrame);
     requestAnimationFrame(function(){
       var card = cardEls[id];
       if(!card) return;
@@ -799,13 +934,27 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
       var availableHeight = vp.clientHeight - (mobile ? detailsShell.offsetHeight : 0) - 32;
       var groupWidth = Math.max(1, bounds.right - bounds.left);
       var groupHeight = Math.max(1, bounds.bottom - bounds.top);
-      scale = Math.min(1.6, Math.max(0.1, Math.min(availableWidth/groupWidth, availableHeight/groupHeight)));
-      applyScale();
-      scrollCanvasTo(
-        ((bounds.left + bounds.right)/2) * scale - availableWidth/2,
-        ((bounds.top + bounds.bottom)/2) * scale - availableHeight/2,
-        true
-      );
+      var startScale = scale;
+      var targetScale = Math.min(1.6, Math.max(0.1, Math.min(availableWidth/groupWidth, availableHeight/groupHeight)));
+      var startLeft = vp.scrollLeft, startTop = vp.scrollTop;
+      var targetLeft = ((bounds.left + bounds.right)/2) * targetScale - availableWidth/2;
+      var targetTop = ((bounds.top + bounds.bottom)/2) * targetScale - availableHeight/2;
+      var startedAt = performance.now();
+      var duration = 520;
+      function animateFocus(now){
+        var progress = Math.min(1, (now - startedAt) / duration);
+        var eased = 1 - Math.pow(1 - progress, 3);
+        scale = startScale + (targetScale - startScale) * eased;
+        applyScale();
+        vp.scrollLeft = startLeft + (targetLeft - startLeft) * eased;
+        vp.scrollTop = startTop + (targetTop - startTop) * eased;
+        if(progress < 1){
+          focusAnimationFrame = requestAnimationFrame(animateFocus);
+        } else {
+          focusAnimationFrame = null;
+        }
+      }
+      focusAnimationFrame = requestAnimationFrame(animateFocus);
     });
   }
   function applyFocus(){
@@ -943,13 +1092,40 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
     var trueMaxDepth = Math.max.apply(null, Object.values(structDepth));
     var unknownCount = ids.filter(function(id){ return byId[id].name === 'Unknown'; }).length;
     document.getElementById('stats').textContent = total+' members · '+(trueMaxDepth+1)+' generations' + (unknownCount ? ' · '+unknownCount+' need details' : '');
-    var legend = document.getElementById('legend');
     var html = '<div class="legend-title">Legend</div>';
     for(var d=0; d<=Math.min(trueMaxDepth,5); d++){
       html += '<div class="legend-row"><span class="dot" style="background:var(--gen'+d+')"></span>Generation '+(d+1)+'</div>';
     }
     if(unknownCount) html += '<div class="legend-row"><span class="dot unknown-dot"></span>Details needed</div>';
-    legend.innerHTML = html;
+    legendContent.innerHTML = html;
+    renderTimeline();
+    renderFacts();
+  }
+
+  function renderTimeline(){
+    var events = [];
+    RAW.forEach(function(person){
+      [['birth','Birth'],['death','Death'],['marriage','Marriage'],['divorce','Divorce']].forEach(function(definition){
+        var year = Number(person[definition[0]] || person[definition[0]+'Year']);
+        if(year > 0) events.push({year:year, type:definition[1], name:person.name});
+      });
+    });
+    events.sort(function(a,b){ return a.year-b.year || a.name.localeCompare(b.name); });
+    if(!events.length){
+      document.getElementById('timelineTrack').innerHTML = '<div class="timeline-empty">Add birth, death, marriage, or divorce years to family-data.js to build the timeline.</div>';
+      return;
+    }
+    document.getElementById('timelineTrack').innerHTML = events.map(function(event){
+      return '<div class="timeline-event event-'+event.type.toLowerCase()+'"><div class="timeline-year">'+event.year+'</div><div class="timeline-type">'+event.type+'</div><div class="timeline-name">'+esc(event.name)+'</div></div>';
+    }).join('');
+  }
+  function renderFacts(){
+    var withChildren = RAW.filter(function(person){ return (person.children || []).some(function(id){ return byId[id]; }); }).length;
+    var recordedBirths = RAW.filter(function(person){ return Number(person.birth) > 0; }).length;
+    var recordedDeaths = RAW.filter(function(person){ return Number(person.death) > 0; }).length;
+    var generations = Math.max.apply(null, Object.values(structDepth)) + 1;
+    var facts = [[RAW.length,'Family members'],[generations,'Generations'],[withChildren,'Members with children'],[recordedBirths + recordedDeaths,'Recorded life events']];
+    document.getElementById('factsGrid').innerHTML = facts.map(function(fact){ return '<div class="fact-card"><div class="fact-value">'+fact[0]+'</div><div class="fact-label">'+fact[1]+'</div></div>'; }).join('');
   }
 
   render();
