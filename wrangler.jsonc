@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "prabhu-family-image-upload",
+  "main": "worker.js",
+  "compatibility_date": "2026-08-23",
+  "observability": {
+    "enabled": true
+  },
+  "secrets": {
+    "required": ["IMGBB_API_KEY"]
+  }
+}

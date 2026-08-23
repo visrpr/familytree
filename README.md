@@ -1,21 +1,17 @@
-# 🌳 Family Tree Web Project 🌳
+# Prabhu Family Tree image upload
 
-Welcome to the repository for our family history website! This project is a digital space dedicated to preserving our family’s lineage, sharing historical photos, and connecting generations.
+The page sends editor photo uploads to `/api/upload`. `worker.js` validates the file and forwards it to ImgBB without exposing the API key in the browser.
 
- 
-# Click Here 👉: [FAMILY TREE](https://visrpr.github.io/familytree/)
+## Deploy the Worker
 
----
+1. Install Wrangler if needed: `npm install --save-dev wrangler`
+2. Authenticate: `npx wrangler login`
+3. Add the ImgBB key as a Cloudflare secret:
 
-# ✨ Features
-* **Interactive Family Tree:** Visual representation of generations, lineage branches, and relative connections.
-* **Biographical Profiles:** Dedicated pages or sections for family members featuring key dates, milestones, and stories.
-* **Photo Gallery:** A curated archive of historical family photographs and scanned documents.
-* **Mobile-Friendly Design:** Fully responsive layout that looks great on phones, tablets, and desktop computers.
+   `npx wrangler secret put IMGBB_API_KEY`
 
----
+4. Deploy from this folder:
 
-# 🛠️ Built With
-* **HTML5 / CSS3:** Structure and styling for the core pages.
-* **JavaScript:** Interactive elements and dynamic family tree navigation.
-* **GitHub Pages:** Free, fast hosting for the live site.
+   `npx wrangler deploy`
+
+The frontend and Worker should share the same origin for `/api/upload` to work directly. If the Worker is hosted separately, set `ALLOWED_ORIGIN` in `wrangler.jsonc` to the frontend origin and change `IMAGE_UPLOAD_ENDPOINT` in `index.html` to the Worker URL.
