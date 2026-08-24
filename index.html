@@ -415,7 +415,6 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
       <label>Name<input id="editName" type="text" required></label>
       <label>Birth year<input id="editBirth" type="text" inputmode="numeric" maxlength="4"></label>
       <label>Death year<input id="editDeath" type="text" inputmode="numeric" maxlength="4"></label>
-      <label>Photo<input id="editPhoto" type="file" accept="image/*"></label>
       <p class="details-editor-status" id="detailsEditorStatus" role="status" aria-live="polite"></p>
       <div class="details-editor-actions"><button id="editCancel" type="button">Cancel</button><button class="details-editor-save" type="submit">Save changes</button></div>
     </form>
@@ -469,9 +468,8 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
 <script>
 (function(){
   'use strict';
-  // Replace this with your FormSubmit address. Submitters do not need an account.
+  // Submitters do not need an account.
   var FORM_ENDPOINT = 'https://formsubmit.co/ajax/visrpr@gmail.com';
-  var IMAGE_UPLOAD_ENDPOINT = '/api/upload';
   var RAW = window.FAMILY_DATA || [];
   var byId = Object.fromEntries(RAW.map(function(p){ return [p.id, p]; }));
   var ROOT_ID = 'padmanabh';
@@ -509,7 +507,6 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
   var editName = document.getElementById('editName');
   var editBirth = document.getElementById('editBirth');
   var editDeath = document.getElementById('editDeath');
-  var editPhoto = document.getElementById('editPhoto');
   var editCancel = document.getElementById('editCancel');
   var detailsEditorStatus = document.getElementById('detailsEditorStatus');
   var editingPerson = null;
@@ -894,7 +891,6 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
     editName.value = editingPerson.name || '';
     editBirth.value = editingPerson.birth || '';
     editDeath.value = editingPerson.death || '';
-    editPhoto.value = '';
     detailsEditorStatus.textContent = '';
     detailsEditorStatus.className = 'details-editor-status';
     detailsEditor.classList.add('open');
@@ -910,34 +906,12 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
     editingPerson.death = editDeath.value.trim();
     var persist = function(){
       storedEdits[editingPerson.id] = {name:editingPerson.name,birth:editingPerson.birth,death:editingPerson.death};
-      if(editingPerson.photo) storedEdits[editingPerson.id].photo = editingPerson.photo;
       localStorage.setItem('prabhu-family-edits', JSON.stringify(storedEdits));
       detailsEditor.classList.remove('open');
       render();
       openDetails(editingPerson);
     };
-    var photo = editPhoto.files[0];
-    if(photo){
-      if(photo.type.indexOf('image/') !== 0){ detailsEditorStatus.textContent = 'Please choose an image file.'; return; }
-      if(photo.size > 10 * 1024 * 1024){
-        detailsEditorStatus.textContent = 'Please choose an image smaller than 10 MB.';
-        return;
-      }
-      detailsEditorStatus.textContent = 'Uploading photo...';
-      var formData = new FormData();
-      formData.append('image', photo);
-      fetch(IMAGE_UPLOAD_ENDPOINT, {method:'POST', body:formData, headers:{Accept:'application/json'}})
-        .then(function(response){ if(!response.ok) throw new Error('Upload failed'); return response.json(); })
-        .then(function(result){
-          var imageUrl = result && result.data && (result.data.display_url || result.data.url);
-          if(!imageUrl) throw new Error('ImgBB returned no image URL');
-          editingPerson.photo = imageUrl;
-          persist();
-          detailsEditorStatus.className = 'details-editor-status success';
-          detailsEditorStatus.textContent = 'Photo uploaded and saved.';
-        })
-        .catch(function(){ detailsEditorStatus.textContent = 'Photo upload failed. Check the ImgBB key and try again.'; });
-    } else persist();
+    persist();
   });
 
   function closeDetails(){
