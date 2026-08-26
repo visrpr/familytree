@@ -5,7 +5,7 @@ function corsHeaders(origin) {
   return {
     'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Headers': 'Content-Type, Accept',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Vary': 'Origin'
   };
 }
@@ -37,6 +37,18 @@ function githubHeaders(token) {
     'User-Agent': 'family-tree-worker',
     'X-GitHub-Api-Version': '2022-11-28'
   };
+}
+
+async function readGitHubFamilyData(env) {
+  const path = env.GITHUB_PATH || 'family-data.js';
+  const endpoint = `https://api.github.com/repos/${encodeURIComponent(env.GITHUB_OWNER)}/${encodeURIComponent(env.GITHUB_REPOSITORY)}/contents/${path.split('/').map(encodeURIComponent).join('/')}`;
+  const response = await fetch(`${endpoint}?ref=${encodeURIComponent(env.GITHUB_BRANCH || 'main')}`, {
+    cache: 'no-store',
+    headers: githubHeaders(env.GITHUB_TOKEN)
+  });
+  if (!response.ok) throw new Error(`GitHub read failed (${response.status}).`);
+  const file = await response.json();
+  return { source: decodeBase64(file.content), sha: file.sha };
 }
 
 function updatePersonRecord(source, personId, fields) {
@@ -101,15 +113,8 @@ async function commitFamilyData(source, sha, personId, fields, env) {
 }
 
 async function updateGitHubFamilyData(personId, fields, env) {
-  const path = env.GITHUB_PATH || 'family-data.js';
-  const endpoint = `https://api.github.com/repos/${encodeURIComponent(env.GITHUB_OWNER)}/${encodeURIComponent(env.GITHUB_REPOSITORY)}/contents/${path.split('/').map(encodeURIComponent).join('/')}`;
-  const response = await fetch(`${endpoint}?ref=${encodeURIComponent(env.GITHUB_BRANCH || 'main')}`, {
-    headers: githubHeaders(env.GITHUB_TOKEN)
-  });
-  if (!response.ok) throw new Error(`GitHub read failed (${response.status}).`);
-  const file = await response.json();
-  const source = decodeBase64(file.content);
-  return commitFamilyData(source, file.sha, personId, fields, env);
+  const file = await readGitHubFamilyData(env);
+  return commitFamilyData(file.source, file.sha, personId, fields, env);
 }
 
 export default {
@@ -120,6 +125,19 @@ export default {
     const responseOrigin = requestOrigin === allowedOrigin ? requestOrigin : allowedOrigin;
 
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders(responseOrigin) });
+    if (url.pathname === '/api/data.js' && request.method === 'GET') {
+      if (requestOrigin && requestOrigin !== allowedOrigin) return json({ error: 'Origin not allowed.' }, 403, responseOrigin);
+      if (!env.GITHUB_TOKEN || !env.GITHUB_OWNER || !env.GITHUB_REPOSITORY) return json({ error: 'Data service is not configured.' }, 503, responseOrigin);
+      try {
+        const file = await readGitHubFamilyData(env);
+        return new Response(file.source, {
+          status: 200,
+          headers: { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-store, no-cache, must-revalidate', ...corsHeaders(responseOrigin) }
+        });
+      } catch (error) {
+        return json({ error: error instanceof Error ? error.message : 'Could not read family data.' }, 502, responseOrigin);
+      }
+    }
     if (!['/api/upload', '/api/update'].includes(url.pathname) || request.method !== 'POST') return json({ error: 'Not found' }, 404, responseOrigin);
     if (requestOrigin && requestOrigin !== allowedOrigin) return json({ error: 'Origin not allowed.' }, 403, responseOrigin);
     if (!env.GITHUB_TOKEN || !env.GITHUB_OWNER || !env.GITHUB_REPOSITORY || (url.pathname === '/api/upload' && !env.IMGBB_API_KEY)) {
