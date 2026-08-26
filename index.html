@@ -942,7 +942,7 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
     if(photo){
       detailsEditorStatus.className = 'details-editor-status';
       detailsEditorStatus.textContent = 'Saving photo online...';
-      saveData(true).catch(function(){ detailsEditorStatus.textContent = 'Photo upload failed. Check the ImgBB and GitHub configuration.'; });
+      saveData(true).catch(function(error){ detailsEditorStatus.textContent = error.message || 'Photo upload failed. Check the ImgBB and GitHub configuration.'; });
     } else {
       detailsEditorStatus.className = 'details-editor-status';
       detailsEditorStatus.textContent = 'Saving changes online...';

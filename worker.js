@@ -34,6 +34,7 @@ function githubHeaders(token) {
   return {
     Accept: 'application/vnd.github+json',
     Authorization: `Bearer ${token}`,
+    'User-Agent': 'family-tree-worker',
     'X-GitHub-Api-Version': '2022-11-28'
   };
 }
@@ -85,7 +86,7 @@ async function commitFamilyData(source, sha, personId, fields, env) {
       branch: env.GITHUB_BRANCH || 'main'
     })
   });
-  if (!response.ok) throw new Error('GitHub rejected the family data update.');
+  if (!response.ok) throw new Error(`GitHub update failed (${response.status}).`);
   return updated;
 }
 
@@ -95,7 +96,7 @@ async function updateGitHubFamilyData(personId, fields, env) {
   const response = await fetch(`${endpoint}?ref=${encodeURIComponent(env.GITHUB_BRANCH || 'main')}`, {
     headers: githubHeaders(env.GITHUB_TOKEN)
   });
-  if (!response.ok) throw new Error('Could not read family data from GitHub.');
+  if (!response.ok) throw new Error(`GitHub read failed (${response.status}).`);
   const file = await response.json();
   const source = decodeBase64(file.content);
   return commitFamilyData(source, file.sha, personId, fields, env);
