@@ -48,8 +48,18 @@ function updatePersonRecord(source, personId, fields) {
   let record = match[1];
   Object.entries(fields).forEach(([field, value]) => {
     if (value === undefined) return;
-    const fieldPattern = new RegExp(`,${field}:(?:"(?:\\\\.|[^"\\\\])*")`);
-    const replacement = `,${field}:${JSON.stringify(value)}`;
+    const fieldPattern = new RegExp(`,${field}:(?:"(?:\\\\.|[^"\\\\])*"|\\[[^\\n]*?\\])`);
+    let nextValue = value;
+    const existingField = record.match(fieldPattern);
+    if (field === 'photos' && Array.isArray(value) && existingField) {
+      try {
+        const existingPhotos = JSON.parse(existingField[0].slice(existingField[0].indexOf(':') + 1));
+        nextValue = existingPhotos.concat(value.filter(photo => !existingPhotos.includes(photo)));
+      } catch (error) {
+        nextValue = value;
+      }
+    }
+    const replacement = `,${field}:${JSON.stringify(nextValue)}`;
     if (fieldPattern.test(record)) record = record.replace(fieldPattern, replacement);
     else if (record.includes(',children:')) record = record.replace(',children:', `${replacement},children:`);
     else record = record.replace(/},?$/, `${replacement}}`);
@@ -145,7 +155,9 @@ export default {
 
       const updated = await updateGitHubFamilyData(personId, fields, env);
       const imageUrl = fields.photos && fields.photos[0];
-      return json({ success: true, ...(imageUrl ? { url: imageUrl } : {}), updated }, 200, responseOrigin);
+      const photoMatch = updated.match(new RegExp(`,photos:(\\[[^\\n]*?\\])`));
+      const photos = photoMatch ? JSON.parse(photoMatch[1]) : undefined;
+      return json({ success: true, ...(imageUrl ? { url: imageUrl, photos } : {}), updated }, 200, responseOrigin);
     } catch (error) {
       console.error(JSON.stringify({ message: 'Image upload failed', error: error instanceof Error ? error.message : String(error) }));
       return json({ error: error instanceof Error ? error.message : 'Image upload failed.' }, 502, responseOrigin);

@@ -919,10 +919,10 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
       detailsEditorStatus.textContent = 'Please choose an image smaller than 32 MB.';
       return;
     }
-    var persist = function(photoUrl){
+    var persist = function(photoUrl, photos){
       if(photoUrl){
         editingPerson.photo = photoUrl;
-        editingPerson.photos = [photoUrl];
+        editingPerson.photos = photos && photos.length ? photos : [photoUrl];
       }
       detailsEditor.classList.remove('open');
       render();
@@ -934,7 +934,7 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
       var options = photoUrl ? {method:'POST', body:(function(){ var data = new FormData(); data.append('image', photo); data.append('personId', editingPerson.id); return data; })(), headers:{Accept:'application/json'}} : {method:'POST', body:JSON.stringify({personId:editingPerson.id,name:editingPerson.name,birth:editingPerson.birth,death:editingPerson.death}), headers:{'Content-Type':'application/json',Accept:'application/json'}};
       return fetch(endpoint, options).then(function(response){ if(!response.ok) throw new Error('Save failed'); return response.json(); }).then(function(result){
         if(photoUrl && !result.url) throw new Error('ImgBB returned no image URL');
-        persist(photoUrl ? result.url : null);
+        persist(photoUrl ? result.url : null, result.photos);
         detailsEditorStatus.className = 'details-editor-status success';
         detailsEditorStatus.textContent = 'Changes saved online.';
       });
