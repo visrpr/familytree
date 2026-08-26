@@ -100,7 +100,7 @@ const family = [
 {id:"srinivas",name:"Srinivas Prabhu",gender:"male",birth:"",death:"",spouse:"roopa-s-prabhu",children:["bhumika","vijay"]},
 {id:"taranath-bhandarkar",name:"Taranath Bhandarkar",gender:"male",birth:"",death:"",spouse:"chandri",children:["roopa-s-prabhu","pandurang-bhandarkar"]},
 {id:"chandri",name:"Chandrakala",gender:"female",birth:"",death:"",spouse:"taranath-bhandarkar",children:[]},
-{id:"roopa-s-prabhu",name:"Roopa S Prabhu",maidenName:"Bhandarkar",gender:"female",birth:"",death:"",spouse:"srinivas",children:[]},
+{id:"roopa-s-prabhu",name:"Roopa S Prabhu",maidenName:"Bhandarkar",gender:"female",birth:"",death:"",spouse:"srinivas",photos:["https://i.ibb.co/tpWKGVWw/IMG20260807182530.jpg"],children:[]},
 {id:"pandurang-bhandarkar",name:"Pandurang Bhandarkar",gender:"male",birth:"",death:"",spouse:"shambavi-bhandarker",children:["dhruti"]},
 {id:"shambavi-bhandarker",name:"Shambavi Bhandarker",gender:"female",birth:"",death:"",spouse:"pandurang-bhandarkar",children:[]},
 {id:"dhruti",name:"Dhruti",gender:"female",birth:"",death:"",children:[]},
