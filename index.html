@@ -203,6 +203,7 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
 .details-editor{display:none;margin:0 0 22px;padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--card)}
 .details-editor.open{display:grid;gap:12px}
 .details-editor label{display:grid;gap:6px;color:var(--ink-soft);font:600 11px 'Inter',sans-serif}
+.details-editor-years{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .details-editor input{width:100%;border:1px solid var(--border);border-radius:8px;background:#fffdf8;padding:9px 10px;color:var(--ink);font:13px 'Inter',sans-serif}
 .details-editor input:focus{outline:none;border-color:var(--brass);box-shadow:0 0 0 3px rgba(156,122,58,.13)}
 .details-editor-status{min-height:17px;margin:0;color:var(--maroon);font-size:11px;line-height:1.4}
@@ -412,9 +413,12 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
       </div>
     </div>
     <form class="details-editor" id="detailsEditor">
+      <label>Photo<input id="editPhoto" type="file" accept="image/*"><span class="submit-help">Images only, up to 32 MB. Uploaded to ImgBB.</span></label>
       <label>Name<input id="editName" type="text" required></label>
-      <label>Birth year<input id="editBirth" type="text" inputmode="numeric" maxlength="4"></label>
-      <label>Death year<input id="editDeath" type="text" inputmode="numeric" maxlength="4"></label>
+      <div class="details-editor-years">
+        <label>Birth year<input id="editBirth" type="text" inputmode="numeric" maxlength="4"></label>
+        <label>Death year<input id="editDeath" type="text" inputmode="numeric" maxlength="4"></label>
+      </div>
       <p class="details-editor-status" id="detailsEditorStatus" role="status" aria-live="polite"></p>
       <div class="details-editor-actions"><button id="editCancel" type="button">Cancel</button><button class="details-editor-save" type="submit">Save changes</button></div>
     </form>
@@ -470,6 +474,7 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
   'use strict';
   // Submitters do not need an account.
   var FORM_ENDPOINT = 'https://formsubmit.co/ajax/visrpr@gmail.com';
+  var IMAGE_UPLOAD_ENDPOINT = 'https://prabhu-family-image-upload.visrpr.workers.dev/api/upload';
   var RAW = window.FAMILY_DATA || [];
   var byId = Object.fromEntries(RAW.map(function(p){ return [p.id, p]; }));
   var ROOT_ID = 'padmanabh';
@@ -507,11 +512,10 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
   var editName = document.getElementById('editName');
   var editBirth = document.getElementById('editBirth');
   var editDeath = document.getElementById('editDeath');
+  var editPhoto = document.getElementById('editPhoto');
   var editCancel = document.getElementById('editCancel');
   var detailsEditorStatus = document.getElementById('detailsEditorStatus');
   var editingPerson = null;
-  var storedEdits = JSON.parse(localStorage.getItem('prabhu-family-edits') || '{}');
-  Object.keys(storedEdits).forEach(function(id){ if(byId[id]) Object.assign(byId[id], storedEdits[id]); });
   var pageTurnSound = new Audio('https://od.lk/s/OF8yMDg3OTg5MjRfQzJZb0E/pageturn.mp3');
   var galleryImages = [];
   var galleryIndex = 0;
@@ -825,14 +829,14 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
       spouseGroup.appendChild(spouseLinks);
       detailsRelations.appendChild(spouseGroup);
     }
-    var parent = parentOf[p.id] && byId[parentOf[p.id]];
-    if(parent){
+    var parents = parentIdsFor(p.id).map(function(parentId){ return byId[parentId]; }).filter(Boolean);
+    if(parents.length){
       var parentsGroup = document.createElement('div');
       parentsGroup.className = 'relation-group';
       parentsGroup.innerHTML = '<div class="relation-group-title">Parents</div>';
       var parentsLinks = document.createElement('div');
       parentsLinks.className = 'relation-links';
-      parentsLinks.appendChild(relationLink(parent));
+      parents.forEach(function(parent){ parentsLinks.appendChild(relationLink(parent)); });
       parentsGroup.appendChild(parentsLinks);
       detailsRelations.appendChild(parentsGroup);
     }
@@ -846,7 +850,8 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
       childrenGroup.appendChild(childrenLinks);
       detailsRelations.appendChild(childrenGroup);
     }
-    var siblingIds = (p.siblings || []).concat(parent ? (parent.children || []) : []);
+    var siblingIds = (p.siblings || []).slice();
+    parents.forEach(function(parent){ siblingIds = siblingIds.concat(parent.children || []); });
     var siblings = siblingIds.map(function(id){ return byId[id]; }).filter(function(sibling){
       return sibling && sibling.id !== p.id;
     }).filter(function(sibling, index, list){
@@ -891,6 +896,7 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
     editName.value = editingPerson.name || '';
     editBirth.value = editingPerson.birth || '';
     editDeath.value = editingPerson.death || '';
+    editPhoto.value = '';
     detailsEditorStatus.textContent = '';
     detailsEditorStatus.className = 'details-editor-status';
     detailsEditor.classList.add('open');
@@ -904,14 +910,44 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
     editingPerson.name = editName.value.trim();
     editingPerson.birth = editBirth.value.trim();
     editingPerson.death = editDeath.value.trim();
-    var persist = function(){
-      storedEdits[editingPerson.id] = {name:editingPerson.name,birth:editingPerson.birth,death:editingPerson.death};
-      localStorage.setItem('prabhu-family-edits', JSON.stringify(storedEdits));
+    var photo = editPhoto.files[0];
+    if(photo && photo.type.indexOf('image/') !== 0){
+      detailsEditorStatus.textContent = 'Please choose an image file.';
+      return;
+    }
+    if(photo && photo.size > 32 * 1024 * 1024){
+      detailsEditorStatus.textContent = 'Please choose an image smaller than 32 MB.';
+      return;
+    }
+    var persist = function(photoUrl){
+      if(photoUrl){
+        editingPerson.photo = photoUrl;
+        editingPerson.photos = [photoUrl];
+      }
       detailsEditor.classList.remove('open');
       render();
+      updateStatsAndLegend();
       openDetails(editingPerson);
     };
-    persist();
+    var saveData = function(photoUrl){
+      var endpoint = photoUrl ? IMAGE_UPLOAD_ENDPOINT : IMAGE_UPLOAD_ENDPOINT.replace(/\/api\/upload$/, '/api/update');
+      var options = photoUrl ? {method:'POST', body:(function(){ var data = new FormData(); data.append('image', photo); data.append('personId', editingPerson.id); return data; })(), headers:{Accept:'application/json'}} : {method:'POST', body:JSON.stringify({personId:editingPerson.id,name:editingPerson.name,birth:editingPerson.birth,death:editingPerson.death}), headers:{'Content-Type':'application/json',Accept:'application/json'}};
+      return fetch(endpoint, options).then(function(response){ if(!response.ok) throw new Error('Save failed'); return response.json(); }).then(function(result){
+        if(photoUrl && !result.url) throw new Error('ImgBB returned no image URL');
+        persist(photoUrl ? result.url : null);
+        detailsEditorStatus.className = 'details-editor-status success';
+        detailsEditorStatus.textContent = 'Changes saved online.';
+      });
+    };
+    if(photo){
+      detailsEditorStatus.className = 'details-editor-status';
+      detailsEditorStatus.textContent = 'Saving photo online...';
+      saveData(true).catch(function(){ detailsEditorStatus.textContent = 'Photo upload failed. Check the ImgBB and GitHub configuration.'; });
+    } else {
+      detailsEditorStatus.className = 'details-editor-status';
+      detailsEditorStatus.textContent = 'Saving changes online...';
+      saveData(false).catch(function(){ detailsEditorStatus.textContent = 'Changes could not be saved online. Try again.'; });
+    }
   });
 
   function closeDetails(){
@@ -1460,8 +1496,9 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
     var q = searchInput.value.trim().toLowerCase();
     searchResults.innerHTML = '';
     if(!q){ searchResults.classList.remove('open'); return; }
-    var matches = Object.keys(structDepth).filter(function(id){
-      return byId[id].name !== 'Unknown' && byId[id].name.toLowerCase().indexOf(q) !== -1;
+    var matches = RAW.filter(function(person){
+      return person.name !== 'Unknown' && person.name.toLowerCase().indexOf(q) !== -1;
+    }).map(function(person){ return person.id;
     }).slice(0,8);
     if(!matches.length){
       searchResults.innerHTML = '<div class="search-empty">No matches</div>';
@@ -1472,7 +1509,7 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
       var p = byId[id];
       var item = document.createElement('div');
       item.className = 'search-item';
-      item.innerHTML = '<span>'+esc(p.name)+'</span><span class="sr-gen">Gen '+(structDepth[id]+1)+'</span>';
+      item.innerHTML = '<span>'+esc(p.name)+'</span><span class="sr-gen">'+(structDepth[id] === undefined ? 'Other branch' : 'Gen '+(structDepth[id]+1))+'</span>';
       item.addEventListener('click', function(){ selectSearchResult(id); });
       searchResults.appendChild(item);
     });
@@ -1508,10 +1545,10 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
   }
 
   function updateStatsAndLegend(){
-    var ids = Object.keys(structDepth);
-    var total = ids.length;
+    var ids = RAW.map(function(person){ return person.id; });
+    var total = RAW.length;
     var trueMaxDepth = Math.max.apply(null, Object.values(structDepth));
-    var unknownCount = ids.filter(function(id){ return byId[id].name === 'Unknown'; }).length;
+    var unknownCount = RAW.filter(function(person){ return person.name === 'Unknown'; }).length;
     document.getElementById('stats').textContent = total+' members · '+(trueMaxDepth+1)+' generations' + (unknownCount ? ' · '+unknownCount+' need details' : '');
     var html = '<div class="legend-title">Legend</div>';
     for(var d=0; d<=Math.min(trueMaxDepth,5); d++){
@@ -1583,7 +1620,7 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
     if(firstSteps === 0 || secondSteps === 0){
       var descendantSteps = Math.max(firstSteps, secondSteps);
       var direction = firstSteps === 0 ? 'ancestor' : 'descendant';
-      var directLabel = descendantSteps === 1 ? 'Parent and child' : descendantSteps === 2 ? 'Aunt/uncle and niece/nephew' : ordinal(descendantSteps-1)+' generation '+(direction === 'ancestor' ? 'ancestor' : 'descendant');
+      var directLabel = descendantSteps === 1 ? 'Parent and child' : descendantSteps === 2 ? 'Grandparent and grandchild' : ordinal(descendantSteps-1)+' generation '+(direction === 'ancestor' ? 'ancestor' : 'descendant');
       return {label:directLabel,note:'Shared ancestor: '+byId[commonId].name+'.'};
     }
     if(firstSteps === 1 && secondSteps === 1) return {label:'Siblings',note:'Shared parent: '+byId[commonId].name+'.'};

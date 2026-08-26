@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "prabhu-family-image-upload",
+  "main": "worker.js",
+  "compatibility_date": "2026-08-24",
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "GITHUB_OWNER": "visrpr",
+    "GITHUB_REPOSITORY": "familytree",
+    "GITHUB_BRANCH": "main",
+    "GITHUB_PATH": "family-data.js",
+    "ALLOWED_ORIGIN": "https://visrpr.github.io"
+  },
+  "secrets": {
+    "required": ["IMGBB_API_KEY", "GITHUB_TOKEN"]
+  }
+}
