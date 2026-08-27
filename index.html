@@ -87,7 +87,7 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
 .marriage-line.family-highlight{stroke:var(--brass-deep);stroke-width:2.5px}
 .marriage-heart{fill:#ca4f61;font:9px/1 'Inter',sans-serif;text-anchor:middle;dominant-baseline:middle}
 
-.person{position:absolute;width:150px;min-height:198px;background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 6px 16px rgba(50,38,14,.08);padding:16px 10px 10px;text-align:center;cursor:pointer;transition:box-shadow .18s,border-color .18s,transform .18s}
+.person{position:absolute;width:150px;background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 6px 16px rgba(50,38,14,.08);padding:16px 10px 10px;text-align:center;cursor:pointer;transition:box-shadow .18s,border-color .18s,transform .18s}
 .person:hover{box-shadow:0 12px 28px rgba(50,38,14,.16);transform:translateY(-3px);z-index:5}
 .person:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
 .person.focused{border-color:var(--maroon);box-shadow:0 0 0 3px rgba(138,58,58,.18),0 12px 26px rgba(50,38,14,.16)}
@@ -235,13 +235,21 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
 .submit-send:disabled{cursor:wait;opacity:.65}
 .details-kicker{font:600 10px 'Inter',sans-serif;letter-spacing:.16em;text-transform:uppercase;color:var(--brass)}
 .details-main{display:grid;grid-template-columns:1fr;gap:22px;align-items:start}
-.details-gallery{position:relative;aspect-ratio:4 / 3;background:var(--bg-deep);border:1px solid var(--border);border-radius:16px;overflow:hidden}
-.details-gallery img{width:100%;height:100%;object-fit:cover;display:block}
-.details-gallery .initials{position:absolute;inset:0;width:auto;height:auto;font-size:54px}
-.gallery-arrow{position:absolute;top:50%;transform:translateY(-50%);width:34px;height:34px;border:1px solid rgba(255,252,246,.7);border-radius:50%;background:rgba(42,35,24,.58);color:#fff;cursor:pointer;font:20px 'Inter',sans-serif;line-height:1}
-.gallery-arrow:hover{background:rgba(42,35,24,.8)}
-.gallery-prev{left:12px}.gallery-next{right:12px}
-.gallery-count{position:absolute;right:12px;bottom:10px;padding:4px 8px;border-radius:12px;background:rgba(42,35,24,.62);color:#fff;font:10px 'Inter',sans-serif}
+.details-gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;background:var(--bg-deep);border:1px solid var(--border);border-radius:16px;padding:8px;overflow:hidden}
+.gallery-slot{position:relative;aspect-ratio:1;border:1px solid var(--border);border-radius:10px;background:var(--card);padding:0;overflow:hidden;cursor:pointer}
+.gallery-slot[draggable="true"]{cursor:grab}
+.gallery-slot.dragging{opacity:.45;cursor:grabbing}
+.gallery-slot.drag-over{border-color:var(--brass-deep);box-shadow:0 0 0 2px rgba(156,122,58,.25)}
+.gallery-slot img{width:100%;height:100%;object-fit:cover;display:block}
+.gallery-slot.empty{display:grid;place-items:center;border-style:dashed;color:var(--muted);font:600 11px 'Inter',sans-serif}
+.gallery-slot.empty:hover{border-color:var(--brass);color:var(--brass-deep);background:var(--bg)}
+.gallery-slot-label{display:grid;gap:4px;justify-items:center;padding:8px;text-align:center}
+.gallery-slot-label strong{font-size:20px;font-weight:400;line-height:1}
+.gallery-slot.replaceable:hover:after{content:'Replace card photo';position:absolute;inset:0;display:grid;place-items:center;padding:8px;background:rgba(42,35,24,.68);color:#fff;font:600 11px/1.3 'Inter',sans-serif;text-align:center}
+.gallery-slot-number{position:absolute;top:6px;left:6px;padding:3px 5px;border-radius:5px;background:rgba(42,35,24,.62);color:#fff;font:600 9px 'Inter',sans-serif}
+.gallery-upload-input{display:none}
+.gallery-upload-status{min-height:18px;margin:8px 0 0;color:var(--muted);font:12px/1.4 'Inter',sans-serif}
+.gallery-upload-status.success{color:#4e6d43}
 .details-info h2{margin:0;font:600 clamp(28px,4vw,44px)/1.08 'Aleo',Georgia,serif;color:var(--ink)}
 .details-maiden-name{margin-top:5px;color:var(--muted);font:13px/1.25 'Inter',sans-serif}
 .details-title-row{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
@@ -413,7 +421,6 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
       </div>
     </div>
     <form class="details-editor" id="detailsEditor">
-      <label>Photo<input id="editPhoto" type="file" accept="image/*"><span class="submit-help">Images only, up to 32 MB. Uploaded to ImgBB.</span></label>
       <label>Name<input id="editName" type="text" required></label>
       <div class="details-editor-years">
         <label>Birth year<input id="editBirth" type="text" inputmode="numeric" maxlength="4"></label>
@@ -424,6 +431,8 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
     </form>
     <div class="details-main">
       <div class="details-gallery" id="detailsGallery"></div>
+      <input class="gallery-upload-input" id="galleryUploadInput" type="file" accept="image/*">
+      <p class="gallery-upload-status" id="galleryUploadStatus" role="status" aria-live="polite"></p>
       <div class="details-info">
         <div class="details-title-row">
           <div>
@@ -512,13 +521,15 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
   var editName = document.getElementById('editName');
   var editBirth = document.getElementById('editBirth');
   var editDeath = document.getElementById('editDeath');
-  var editPhoto = document.getElementById('editPhoto');
   var editCancel = document.getElementById('editCancel');
   var detailsEditorStatus = document.getElementById('detailsEditorStatus');
+  var galleryUploadInput = document.getElementById('galleryUploadInput');
+  var galleryUploadStatus = document.getElementById('galleryUploadStatus');
   var editingPerson = null;
   var pageTurnSound = new Audio('https://od.lk/s/OF8yMDg3OTg5MjRfQzJZb0E/pageturn.mp3');
   var galleryImages = [];
   var galleryIndex = 0;
+  var pendingGallerySlot = -1;
   var submitView = document.getElementById('submitView');
   var submitForm = document.getElementById('submitForm');
   var submitPicture = document.getElementById('submitPicture');
@@ -720,7 +731,7 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
 
   function makeAvatar(p, genDepth){
     var g = 'gen' + Math.max(0, Math.min(genDepth||0, 5));
-    var photoUrl = p.photo || (Array.isArray(p.photos) ? p.photos.filter(Boolean)[0] : '');
+    var photoUrl = (Array.isArray(p.photos) ? p.photos.filter(Boolean)[0] : '') || p.photo;
     var hasPhoto = !!photoUrl;
     var fallbackHtml = '<div class="initials '+g+'" style="display:none">'+esc(initials(p.name))+'</div>';
     var imgSrc = hasPhoto ? photoUrl : illustrationUrl(p);
@@ -755,36 +766,61 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
   }
 
   function displayValue(value){ return value || 'Not provided'; }
+  function saveGalleryOrder(p){
+    galleryUploadStatus.className = 'gallery-upload-status';
+    galleryUploadStatus.textContent = 'Saving photo order online...';
+    fetch(IMAGE_UPLOAD_ENDPOINT.replace(/\/api\/upload$/, '/api/reorder'), {method:'POST',body:JSON.stringify({personId:p.id,photos:galleryImages}),headers:{'Content-Type':'application/json',Accept:'application/json'}})
+      .then(function(response){ return response.json().then(function(result){ if(!response.ok) throw new Error(result.error || 'Could not save photo order.'); return result; }); })
+      .then(function(result){
+        p.photos = result.photos || galleryImages;
+        p.photo = p.photos[0] || p.photo;
+        galleryImages = p.photos.filter(Boolean).slice(0,6);
+        galleryUploadStatus.className = 'gallery-upload-status success';
+        galleryUploadStatus.textContent = 'Photo order saved online.';
+        renderGallery(p);
+        render();
+      })
+      .catch(function(error){ galleryUploadStatus.textContent = error.message || 'Could not save photo order.'; renderGallery(p); });
+  }
   function renderGallery(p){
     detailsGallery.innerHTML = '';
-    if(galleryImages.length){
-      var image = document.createElement('img');
-      image.src = galleryImages[galleryIndex];
-      image.alt = p.name;
-      image.onerror = function(){ detailsGallery.innerHTML = ''; detailsGallery.appendChild(makeFallbackAvatar(p)); };
-      detailsGallery.appendChild(image);
-    } else {
-      detailsGallery.appendChild(makeFallbackAvatar(p));
-    }
-    if(galleryImages.length > 1){
-      var previous = document.createElement('button');
-      previous.className = 'gallery-arrow gallery-prev';
-      previous.type = 'button';
-      previous.setAttribute('aria-label', 'Previous picture');
-      previous.textContent = '‹';
-      previous.onclick = function(){ galleryIndex = (galleryIndex - 1 + galleryImages.length) % galleryImages.length; renderGallery(p); };
-      var next = document.createElement('button');
-      next.className = 'gallery-arrow gallery-next';
-      next.type = 'button';
-      next.setAttribute('aria-label', 'Next picture');
-      next.textContent = '›';
-      next.onclick = function(){ galleryIndex = (galleryIndex + 1) % galleryImages.length; renderGallery(p); };
-      detailsGallery.appendChild(previous);
-      detailsGallery.appendChild(next);
-      var count = document.createElement('div');
-      count.className = 'gallery-count';
-      count.textContent = (galleryIndex + 1) + ' / ' + galleryImages.length;
-      detailsGallery.appendChild(count);
+    for(var slotIndex=0; slotIndex<6; slotIndex++){
+      var slot = document.createElement('button');
+      slot.type = 'button';
+      slot.className = 'gallery-slot' + (galleryImages[slotIndex] ? (slotIndex === 0 ? ' replaceable' : '') : ' empty');
+      slot.draggable = !!galleryImages[slotIndex];
+      slot.setAttribute('aria-label', galleryImages[slotIndex] ? (slotIndex === 0 ? 'Replace card photo' : 'Photo ' + (slotIndex+1)) : 'Upload photo ' + (slotIndex+1));
+      var number = document.createElement('span');
+      number.className = 'gallery-slot-number';
+      number.textContent = slotIndex === 0 ? 'Card photo' : 'Photo ' + (slotIndex+1);
+      slot.appendChild(number);
+      if(galleryImages[slotIndex]){
+        var image = document.createElement('img');
+        image.src = galleryImages[slotIndex];
+        image.alt = p.name + ', photo ' + (slotIndex+1);
+        slot.appendChild(image);
+        if(slotIndex === 0) slot.onclick = function(){ pendingGallerySlot = 0; galleryUploadInput.click(); };
+        slot.addEventListener('dragstart', function(index){ return function(e){ e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(index)); this.classList.add('dragging'); }; }(slotIndex));
+        slot.addEventListener('dragend', function(){ this.classList.remove('dragging'); });
+        slot.addEventListener('dragover', function(e){ e.preventDefault(); e.dataTransfer.dropEffect = 'move'; this.classList.add('drag-over'); });
+        slot.addEventListener('dragleave', function(){ this.classList.remove('drag-over'); });
+        slot.addEventListener('drop', function(index){ return function(e){
+          e.preventDefault();
+          this.classList.remove('drag-over');
+          var sourceIndex = Number(e.dataTransfer.getData('text/plain'));
+          if(sourceIndex === index || !galleryImages[sourceIndex]) return;
+          var movedPhoto = galleryImages.splice(sourceIndex, 1)[0];
+          galleryImages.splice(index, 0, movedPhoto);
+          saveGalleryOrder(p);
+        }; }(slotIndex));
+      } else {
+        var label = document.createElement('span');
+        label.className = 'gallery-slot-label';
+        label.innerHTML = '<strong>+</strong><span>Upload photo</span>';
+        slot.appendChild(label);
+        slot.onclick = function(index){ return function(){ pendingGallerySlot = index; galleryUploadInput.click(); }; }(slotIndex);
+      }
+      detailsGallery.appendChild(slot);
     }
   }
 
@@ -875,6 +911,9 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
     var photos = Array.isArray(p.photos) ? p.photos : (p.photo ? [p.photo] : []);
     galleryImages = photos.filter(Boolean);
     galleryIndex = 0;
+    pendingGallerySlot = -1;
+    galleryUploadStatus.textContent = '';
+    galleryUploadStatus.className = 'gallery-upload-status';
     detailsName.textContent = p.name;
     detailsMaidenName.textContent = p.maidenName ? '(' + p.maidenName + ')' : '';
     detailsMaidenName.hidden = !p.maidenName;
@@ -896,7 +935,6 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
     editName.value = editingPerson.name || '';
     editBirth.value = editingPerson.birth || '';
     editDeath.value = editingPerson.death || '';
-    editPhoto.value = '';
     detailsEditorStatus.textContent = '';
     detailsEditorStatus.className = 'details-editor-status';
     detailsEditor.classList.add('open');
@@ -910,44 +948,50 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
     editingPerson.name = editName.value.trim();
     editingPerson.birth = editBirth.value.trim();
     editingPerson.death = editDeath.value.trim();
-    var photo = editPhoto.files[0];
-    if(photo && photo.type.indexOf('image/') !== 0){
-      detailsEditorStatus.textContent = 'Please choose an image file.';
-      return;
-    }
-    if(photo && photo.size > 32 * 1024 * 1024){
-      detailsEditorStatus.textContent = 'Please choose an image smaller than 32 MB.';
-      return;
-    }
-    var persist = function(photoUrl, photos){
-      if(photoUrl){
-        editingPerson.photo = photoUrl;
-        editingPerson.photos = photos && photos.length ? photos : [photoUrl];
-      }
+    var persist = function(){
       detailsEditor.classList.remove('open');
       render();
       updateStatsAndLegend();
       openDetails(editingPerson);
     };
-    var saveData = function(photoUrl){
-      var endpoint = photoUrl ? IMAGE_UPLOAD_ENDPOINT : IMAGE_UPLOAD_ENDPOINT.replace(/\/api\/upload$/, '/api/update');
-      var options = photoUrl ? {method:'POST', body:(function(){ var data = new FormData(); data.append('image', photo); data.append('personId', editingPerson.id); return data; })(), headers:{Accept:'application/json'}} : {method:'POST', body:JSON.stringify({personId:editingPerson.id,name:editingPerson.name,birth:editingPerson.birth,death:editingPerson.death}), headers:{'Content-Type':'application/json',Accept:'application/json'}};
+    var saveData = function(){
+      var endpoint = IMAGE_UPLOAD_ENDPOINT.replace(/\/api\/upload$/, '/api/update');
+      var options = {method:'POST', body:JSON.stringify({personId:editingPerson.id,name:editingPerson.name,birth:editingPerson.birth,death:editingPerson.death}), headers:{'Content-Type':'application/json',Accept:'application/json'}};
       return fetch(endpoint, options).then(function(response){ if(!response.ok) throw new Error('Save failed'); return response.json(); }).then(function(result){
-        if(photoUrl && !result.url) throw new Error('ImgBB returned no image URL');
-        persist(photoUrl ? result.url : null, result.photos);
+        persist();
         detailsEditorStatus.className = 'details-editor-status success';
         detailsEditorStatus.textContent = 'Changes saved online.';
       });
     };
-    if(photo){
-      detailsEditorStatus.className = 'details-editor-status';
-      detailsEditorStatus.textContent = 'Saving photo online...';
-      saveData(true).catch(function(error){ detailsEditorStatus.textContent = error.message || 'Photo upload failed. Check the ImgBB and GitHub configuration.'; });
-    } else {
-      detailsEditorStatus.className = 'details-editor-status';
-      detailsEditorStatus.textContent = 'Saving changes online...';
-      saveData(false).catch(function(){ detailsEditorStatus.textContent = 'Changes could not be saved online. Try again.'; });
-    }
+    detailsEditorStatus.className = 'details-editor-status';
+    detailsEditorStatus.textContent = 'Saving changes online...';
+    saveData().catch(function(){ detailsEditorStatus.textContent = 'Changes could not be saved online. Try again.'; });
+  });
+
+  galleryUploadInput.addEventListener('change', function(){
+    var photo = galleryUploadInput.files[0];
+    if(!photo || pendingGallerySlot < 0) return;
+    if(photo.type.indexOf('image/') !== 0){ galleryUploadStatus.textContent = 'Please choose an image file.'; galleryUploadInput.value = ''; return; }
+    if(photo.size > 32 * 1024 * 1024){ galleryUploadStatus.textContent = 'Please choose an image smaller than 32 MB.'; galleryUploadInput.value = ''; return; }
+    if(galleryImages.length >= 6 && pendingGallerySlot !== 0){ galleryUploadStatus.textContent = 'The gallery already has six photos.'; galleryUploadInput.value = ''; return; }
+    galleryUploadStatus.className = 'gallery-upload-status';
+    galleryUploadStatus.textContent = 'Uploading photo online...';
+    var data = new FormData();
+    data.append('image', photo);
+    data.append('personId', editingPerson.id);
+    if(pendingGallerySlot === 0) data.append('replaceCardPhoto', 'true');
+    fetch(IMAGE_UPLOAD_ENDPOINT, {method:'POST',body:data,headers:{Accept:'application/json'}})
+      .then(function(response){ return response.json().then(function(result){ if(!response.ok) throw new Error(result.error || 'Upload failed.'); return result; }); })
+      .then(function(result){
+        editingPerson.photos = result.photos || galleryImages.concat(result.url || []);
+        editingPerson.photo = editingPerson.photos[0] || editingPerson.photo;
+        galleryImages = editingPerson.photos.filter(Boolean).slice(0,6);
+        galleryUploadInput.value = '';
+        galleryUploadStatus.className = 'gallery-upload-status success';
+        galleryUploadStatus.textContent = 'Photo uploaded and saved online.';
+        renderGallery(editingPerson);
+      })
+      .catch(function(error){ galleryUploadInput.value = ''; galleryUploadStatus.textContent = error.message || 'Photo upload failed. Try again.'; });
   });
 
   function closeDetails(){
@@ -1460,19 +1504,67 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
   });
 
   var dragging = false, sx=0, sy=0, sl=0, st=0, dragDist=0;
+  var touchPoints = {}, pinchDistance = 0, pinchScale = 1, pinchAnchorX = 0, pinchAnchorY = 0;
+  function touchPointCount(){ return Object.keys(touchPoints).length; }
+  function beginPinch(){
+    var points = Object.keys(touchPoints).map(function(id){ return touchPoints[id]; });
+    if(points.length < 2) return;
+    var first = points[0], second = points[1];
+    pinchDistance = Math.hypot(second.x-first.x, second.y-first.y);
+    if(!pinchDistance) return;
+    var rect = vp.getBoundingClientRect();
+    var midpointX = (first.x+second.x)/2-rect.left, midpointY = (first.y+second.y)/2-rect.top;
+    pinchScale = scale;
+    pinchAnchorX = (vp.scrollLeft+midpointX)/scale;
+    pinchAnchorY = (vp.scrollTop+midpointY)/scale;
+    dragging = false;
+    vp.classList.remove('dragging');
+  }
   vp.addEventListener('pointerdown', function(e){
+    if(e.pointerType === 'touch'){
+      touchPoints[e.pointerId] = {x:e.clientX,y:e.clientY};
+      if(touchPointCount() === 2) beginPinch();
+      if(touchPointCount() > 1) e.preventDefault();
+      vp.setPointerCapture(e.pointerId);
+      if(touchPointCount() > 1) return;
+    }
     if(e.target.closest('.person')) return;
     dragging = true; vp.classList.add('dragging');
     sx=e.clientX; sy=e.clientY; sl=vp.scrollLeft; st=vp.scrollTop; dragDist=0;
     vp.setPointerCapture(e.pointerId);
   });
   vp.addEventListener('pointermove', function(e){
+    if(e.pointerType === 'touch' && touchPoints[e.pointerId]){
+      touchPoints[e.pointerId].x = e.clientX;
+      touchPoints[e.pointerId].y = e.clientY;
+      if(touchPointCount() > 1 && pinchDistance){
+        var points = Object.keys(touchPoints).map(function(id){ return touchPoints[id]; });
+        var first = points[0], second = points[1];
+        var distance = Math.hypot(second.x-first.x, second.y-first.y);
+        var rect = vp.getBoundingClientRect();
+        var midpointX = (first.x+second.x)/2-rect.left, midpointY = (first.y+second.y)/2-rect.top;
+        scale = Math.max(minimumScale(), Math.min(1.6, pinchScale * distance/pinchDistance));
+        applyScale();
+        vp.scrollLeft = pinchAnchorX*scale-midpointX;
+        vp.scrollTop = pinchAnchorY*scale-midpointY;
+        e.preventDefault();
+        return;
+      }
+    }
     if(!dragging) return;
     var dx = e.clientX-sx, dy = e.clientY-sy;
     dragDist = Math.max(dragDist, Math.hypot(dx,dy));
     vp.scrollLeft = sl-dx; vp.scrollTop = st-dy;
   });
-  vp.addEventListener('pointerup', function(){ dragging=false; vp.classList.remove('dragging'); });
+  function endPointer(e){
+    if(e.pointerType === 'touch'){
+      delete touchPoints[e.pointerId];
+      if(touchPointCount() < 2) pinchDistance = 0;
+    }
+    dragging=false; vp.classList.remove('dragging');
+  }
+  vp.addEventListener('pointerup', endPointer);
+  vp.addEventListener('pointercancel', endPointer);
   vp.addEventListener('click', function(e){
     if(dragDist>5) return;
     if(!e.target.closest('.person') && focusedId){ focusedId=null; applyFocus(); }

@@ -59,20 +59,26 @@ function updatePersonRecord(source, personId, fields) {
 
   let record = match[1];
   Object.entries(fields).forEach(([field, value]) => {
-    if (value === undefined) return;
+    if (field === 'replaceCardPhoto' || value === undefined) return;
     const fieldPattern = new RegExp(`,${field}:(?:"(?:\\\\.|[^"\\\\])*"|\\[[^\\n]*?\\])`);
     let nextValue = value;
-    const existingField = record.match(fieldPattern);
-    if (field === 'photos' && Array.isArray(value) && existingField) {
+    const existingFields = field === 'photos' ? record.match(new RegExp(fieldPattern.source, 'g')) : null;
+    if (field === 'photos' && Array.isArray(value) && existingFields) {
       try {
-        const existingPhotos = JSON.parse(existingField[0].slice(existingField[0].indexOf(':') + 1));
-        nextValue = existingPhotos.concat(value.filter(photo => !existingPhotos.includes(photo)));
+        const existingPhotos = existingFields.reduce(function(photos, existingField){
+          return photos.concat(JSON.parse(existingField.slice(existingField.indexOf(':') + 1)));
+        }, []);
+        nextValue = fields.replaceCardPhoto
+          ? value.slice(0, 1).concat(existingPhotos.slice(1)).slice(0, 6)
+          : existingPhotos.concat(value.filter(photo => !existingPhotos.includes(photo))).slice(0, 6);
       } catch (error) {
-        nextValue = value;
+        nextValue = value.slice(0, 6);
       }
     }
     const replacement = `,${field}:${JSON.stringify(nextValue)}`;
-    if (fieldPattern.test(record)) record = record.replace(fieldPattern, replacement);
+    if (field === 'photos' && existingFields) record = record.replace(new RegExp(fieldPattern.source, 'g'), '');
+    if (field === 'photos' && existingFields) record = record.replace(/,children:/, `${replacement},children:`);
+    else if (fieldPattern.test(record)) record = record.replace(fieldPattern, replacement);
     else if (record.includes(',children:')) record = record.replace(',children:', `${replacement},children:`);
     else record = record.replace(/},?$/, `${replacement}}`);
   });
@@ -138,7 +144,7 @@ export default {
         return json({ error: error instanceof Error ? error.message : 'Could not read family data.' }, 502, responseOrigin);
       }
     }
-    if (!['/api/upload', '/api/update'].includes(url.pathname) || request.method !== 'POST') return json({ error: 'Not found' }, 404, responseOrigin);
+    if (!['/api/upload', '/api/update', '/api/reorder'].includes(url.pathname) || request.method !== 'POST') return json({ error: 'Not found' }, 404, responseOrigin);
     if (requestOrigin && requestOrigin !== allowedOrigin) return json({ error: 'Origin not allowed.' }, 403, responseOrigin);
     if (!env.GITHUB_TOKEN || !env.GITHUB_OWNER || !env.GITHUB_REPOSITORY || (url.pathname === '/api/upload' && !env.IMGBB_API_KEY)) {
       return json({ error: 'Upload service is not configured.' }, 503, responseOrigin);
@@ -159,15 +165,18 @@ export default {
         }
         if (image.size > MAX_IMAGE_BYTES) return json({ error: 'Image must be smaller than 32 MB.' }, 413, responseOrigin);
         const imageUrl = await uploadToImgBB(image, env.IMGBB_API_KEY);
-        fields = { photos: [imageUrl] };
+        fields = { photos: [imageUrl], replaceCardPhoto: form.get('replaceCardPhoto') === 'true' };
       } else {
         if (!request.headers.get('Content-Type')?.toLowerCase().includes('application/json')) {
           return json({ error: 'Update must use JSON.' }, 415, responseOrigin);
         }
         const body = await request.json();
         personId = String(body.personId || '');
-        fields = { name: String(body.name || '').trim(), birth: String(body.birth || '').trim(), death: String(body.death || '').trim() };
-        if (!fields.name) return json({ error: 'A name is required.' }, 400, responseOrigin);
+        fields = url.pathname === '/api/reorder'
+          ? { photos: Array.isArray(body.photos) ? body.photos.filter(photo => typeof photo === 'string' && photo).slice(0, 6) : [] }
+          : { name: String(body.name || '').trim(), birth: String(body.birth || '').trim(), death: String(body.death || '').trim() };
+        if (url.pathname === '/api/reorder' && !fields.photos.length) return json({ error: 'At least one photo is required.' }, 400, responseOrigin);
+        if (url.pathname === '/api/update' && !fields.name) return json({ error: 'A name is required.' }, 400, responseOrigin);
       }
       if (!/^[a-z0-9-]+$/.test(personId)) return json({ error: 'A valid family member is required.' }, 400, responseOrigin);
 
