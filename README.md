@@ -14,9 +14,9 @@ Welcome to the repository for our family history website! This project is a digi
 
 ## Storage and deployment
 
-Photos are stored in the Cloudflare R2 bucket `family-tree-photos`. Photo metadata and ordering are stored in the Cloudflare D1 database `family-tree`. New photos must be uploaded through the family tree editor.
+Family members and photo metadata are stored in the Cloudflare D1 database `family-tree`. Image files are stored in the Cloudflare R2 bucket `family-tree-photos`. New photos and profile changes are managed through the family tree editor.
 
-The Cloudflare resources and initial D1 migration are already set up. The binding IDs are recorded in `wrangler.jsonc`, and private secrets are stored in Cloudflare rather than Git.
+The Cloudflare resources, schema, and family-data import are already set up. Binding IDs are recorded in `wrangler.jsonc`, and the private admin token is stored in Cloudflare rather than Git.
 
 For a future schema change or Worker deployment, run these commands from this folder:
 
@@ -25,5 +25,7 @@ npm install
 npx wrangler d1 migrations apply family-tree --remote
 npx wrangler deploy --config D:\FamilyTree\familytree\wrangler.jsonc
 ```
+
+If the family seed data must be rebuilt from `family-data.js`, run `node scripts/seed-people.js` once. It replaces the D1 people records; it does not touch photos.
 
 The admin token is requested the first time you upload, edit, or arrange a photo. It is kept only in that browser session. Do not commit or share the token. Updates to `index.html` are published through the GitHub Pages deployment.

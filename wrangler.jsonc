@@ -7,10 +7,6 @@
 		"enabled": true
 	},
 	"vars": {
-		"GITHUB_OWNER": "visrpr",
-		"GITHUB_REPOSITORY": "familytree",
-		"GITHUB_BRANCH": "main",
-		"GITHUB_PATH": "family-data.js",
 		"ALLOWED_ORIGIN": "https://visrpr.github.io"
 	},
 	"d1_databases": [
@@ -29,7 +25,6 @@
 	],
 	"secrets": {
 		"required": [
-			"GITHUB_TOKEN",
 			"ADMIN_TOKEN"
 		]
 	}
