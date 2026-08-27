@@ -13,7 +13,21 @@
     "GITHUB_PATH": "family-data.js",
     "ALLOWED_ORIGIN": "https://visrpr.github.io"
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "family-tree",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "PHOTOS",
+      "bucket_name": "family-tree-photos"
+    }
+  ],
   "secrets": {
-    "required": ["IMGBB_API_KEY", "GITHUB_TOKEN"]
+    "required": ["IMGBB_API_KEY", "GITHUB_TOKEN", "ADMIN_TOKEN"]
   }
 }

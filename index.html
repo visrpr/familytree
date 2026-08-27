@@ -541,6 +541,17 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
   var labelsToggle = document.getElementById('labelsToggle');
   nodesLayer.classList.add('labels-hidden');
 
+  function adminHeaders(headers){
+    var result = headers || {};
+    var token = sessionStorage.getItem('familyTreeAdminToken');
+    if(!token){
+      token = window.prompt('Enter the family tree admin token:');
+      if(token) sessionStorage.setItem('familyTreeAdminToken', token);
+    }
+    if(token) result.Authorization = 'Bearer ' + token;
+    return result;
+  }
+
   if(!byId[ROOT_ID]){
     nodesLayer.innerHTML = '<div style="padding:40px;font:14px sans-serif;color:#8a3a3a">Could not find root person "'+ROOT_ID+'" in family-data.js</div>';
     return;
@@ -770,7 +781,7 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
   function saveGalleryOrder(p){
     galleryUploadStatus.className = 'gallery-upload-status';
     galleryUploadStatus.textContent = 'Saving photo order online...';
-    fetch(IMAGE_UPLOAD_ENDPOINT.replace(/\/api\/upload$/, '/api/reorder'), {method:'POST',body:JSON.stringify({personId:p.id,photos:galleryImages}),headers:{'Content-Type':'application/json',Accept:'application/json'}})
+    fetch(IMAGE_UPLOAD_ENDPOINT.replace(/\/api\/upload$/, '/api/reorder'), {method:'POST',body:JSON.stringify({personId:p.id,photos:galleryImages}),headers:adminHeaders({'Content-Type':'application/json',Accept:'application/json'})})
       .then(function(response){ return response.json().then(function(result){ if(!response.ok) throw new Error(result.error || 'Could not save photo order.'); return result; }); })
       .then(function(result){
         p.photos = result.photos || galleryImages;
@@ -957,7 +968,7 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
     };
     var saveData = function(){
       var endpoint = IMAGE_UPLOAD_ENDPOINT.replace(/\/api\/upload$/, '/api/update');
-      var options = {method:'POST', body:JSON.stringify({personId:editingPerson.id,name:editingPerson.name,birth:editingPerson.birth,death:editingPerson.death}), headers:{'Content-Type':'application/json',Accept:'application/json'}};
+      var options = {method:'POST', body:JSON.stringify({personId:editingPerson.id,name:editingPerson.name,birth:editingPerson.birth,death:editingPerson.death}), headers:adminHeaders({'Content-Type':'application/json',Accept:'application/json'})};
       return fetch(endpoint, options).then(function(response){ if(!response.ok) throw new Error('Save failed'); return response.json(); }).then(function(result){
         persist();
         detailsEditorStatus.className = 'details-editor-status success';
@@ -981,7 +992,7 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
     data.append('image', photo);
     data.append('personId', editingPerson.id);
     if(pendingGallerySlot === 0) data.append('replaceCardPhoto', 'true');
-    fetch(IMAGE_UPLOAD_ENDPOINT, {method:'POST',body:data,headers:{Accept:'application/json'}})
+    fetch(IMAGE_UPLOAD_ENDPOINT, {method:'POST',body:data,headers:adminHeaders({Accept:'application/json'})})
       .then(function(response){ return response.json().then(function(result){ if(!response.ok) throw new Error(result.error || 'Upload failed.'); return result; }); })
       .then(function(result){
         editingPerson.photos = result.photos || galleryImages.concat(result.url || []);
