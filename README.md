@@ -12,26 +12,18 @@ Welcome to the repository for our family history website! This project is a digi
 * **Photo Gallery:** A curated archive of historical family photographs and scanned documents.
 * **Mobile-Friendly Design:** Fully responsive layout that looks great on phones, tablets, and desktop computers.
 
-## Photo storage setup
+## Storage and deployment
 
-Photos are stored in Cloudflare R2 and their order is stored in Cloudflare D1. The existing GitHub/ImgBB data remains available as a legacy fallback while new uploads use R2.
+Photos are stored in the Cloudflare R2 bucket `family-tree-photos`. Photo metadata and ordering are stored in the Cloudflare D1 database `family-tree`. Existing GitHub/ImgBB photos remain available as a legacy fallback, while new uploads use R2.
 
-Run these commands from this folder:
+The Cloudflare resources and initial D1 migration are already set up. The binding IDs are recorded in `wrangler.jsonc`, and private secrets are stored in Cloudflare rather than Git.
+
+For a future schema change or Worker deployment, run these commands from this folder:
 
 ```powershell
 npm install
-npx wrangler r2 bucket create family-tree-photos
-npx wrangler d1 create family-tree
-```
-
-Copy the D1 `database_id` printed by the last command into `wrangler.jsonc`, replacing `REPLACE_WITH_D1_DATABASE_ID`. Then create the tables and set the admin token:
-
-```powershell
 npx wrangler d1 migrations apply family-tree --remote
-npx wrangler secret put ADMIN_TOKEN
-npx wrangler secret put GITHUB_TOKEN
-npx wrangler secret put IMGBB_API_KEY
-npx wrangler deploy
+npx wrangler deploy --config D:\FamilyTree\familytree\wrangler.jsonc
 ```
 
-The admin token is requested the first time you upload, edit, or arrange a photo. It is kept only in that browser session. The GitHub Pages deployment must also include the updated `index.html`.
+The admin token is requested the first time you upload, edit, or arrange a photo. It is kept only in that browser session. Do not commit or share the token. Updates to `index.html` are published through the GitHub Pages deployment.
