@@ -15,7 +15,7 @@
 	- siblings: optional sibling ids when shared parents are not recorded.
 	- parents: optional parent ids when the parent branch is not part of the main tree.
 	- children: child ids in eldest-to-youngest order, from left to right.
-	- photos: optional array of image URLs for the detail-page carousel.
+	- photos are managed in Cloudflare R2 and D1, not in this seed file.
 	- description, phone, email, address: optional detail-page information.
 
 	Example:
@@ -27,7 +27,6 @@
 		death: "2000",
 		spouse: "spouse-id",
 		children: ["eldest-child-id", "youngest-child-id"],
-		photos: ["https://example.com/photo.jpg"],
 		description: "A short description.",
 		phone: "+1 555 0100",
 		email: "person@example.com",
@@ -46,7 +45,6 @@ var family = [
 {id:"prema",name:"Prema",gender:"female",birth:"",death:"",children:[]},
 {id:"baby",name:"Baby",gender:"female",birth:"",death:"",children:[]},
 {id:"ratnakar",name:"Ratnakar",gender:"male",birth:"",death:"",children:[]},
-
 // Ram branch
 {id:"ram",name:"Ram Prabhu",gender:"male",birth:"",death:"",children:["narasim","govind","hari","mukund","madhu","kalyani","triveni"]},
 
@@ -100,12 +98,12 @@ var family = [
 {id:"srinivas",name:"Srinivas Prabhu",gender:"male",birth:"",death:"",spouse:"roopa-s-prabhu",children:["bhumika","vijay"]},
 {id:"taranath-bhandarkar",name:"Taranath Bhandarkar",gender:"male",birth:"",death:"",spouse:"chandri",children:["roopa-s-prabhu","pandurang-bhandarkar"]},
 {id:"chandri",name:"Chandrakala",gender:"female",birth:"",death:"",spouse:"taranath-bhandarkar",children:[]},
-{id:"roopa-s-prabhu",name:"Roopa S Prabhu",maidenName:"Bhandarkar",gender:"female",birth:"",death:"",spouse:"srinivas",photos:["https://i.ibb.co/tpWKGVWw/IMG20260807182530.jpg"],children:[]},
+{id:"roopa-s-prabhu",name:"Roopa S Prabhu",maidenName:"Bhandarkar",gender:"female",birth:"",death:"",spouse:"srinivas",children:[]},
 {id:"pandurang-bhandarkar",name:"Pandurang Bhandarkar",gender:"male",birth:"",death:"",spouse:"shambavi-bhandarker",children:["dhruti"]},
 {id:"shambavi-bhandarker",name:"Shambavi Bhandarker",gender:"female",birth:"",death:"",spouse:"pandurang-bhandarkar",children:[]},
 {id:"dhruti",name:"Dhruti",gender:"female",birth:"",death:"",children:[]},
-{id:"bhumika",name:"Bhumika S Prabhu",gender:"female",birth:"1997",death:"2018",photos:["https://i.ibb.co/RG5f8nQd/Whats-App-Image-2021-10-31-at-6-40-54-PM.jpg","https://i.ibb.co/5XnqmPTt/File-Name-Lost-4540.jpg"],children:[]},
-{id:"vijay",name:"Vijay S Prabhu",gender:"male",birth:"",death:"",photos:["https://i.ibb.co/YYWkDNn/PXL-20230312-103814451-2.jpg"],children:[]},
+{id:"bhumika",name:"Bhumika S Prabhu",gender:"female",birth:"1997",death:"2018",children:[]},
+{id:"vijay",name:"Vijay S Prabhu",gender:"male",birth:"",death:"",children:[]},
 {id:"rajesh",name:"Rajesh",gender:"male",birth:"",death:"",children:["miraya"]},
 {id:"miraya",name:"Miraya",gender:"female",birth:"",death:"",children:[]},
 {id:"ullas",name:"Ullas Prabhu",gender:"unknown",birth:"",death:"",children:["raghu","anupama"]},

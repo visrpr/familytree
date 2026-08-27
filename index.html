@@ -743,7 +743,7 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
 
   function makeAvatar(p, genDepth){
     var g = 'gen' + Math.max(0, Math.min(genDepth||0, 5));
-    var photoUrl = (Array.isArray(p.photos) ? p.photos.filter(Boolean)[0] : '') || p.photo;
+    var photoUrl = Array.isArray(p.photos) ? p.photos.filter(Boolean)[0] : '';
     var hasPhoto = !!photoUrl;
     var fallbackHtml = '<div class="initials '+g+'" style="display:none">'+esc(initials(p.name))+'</div>';
     var imgSrc = hasPhoto ? photoUrl : illustrationUrl(p);
@@ -786,7 +786,6 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
       .then(function(result){
         p.photos = result.photos || galleryImages.map(function(photo){ return photo.url; });
         p.photoIds = result.photoIds || galleryImages.map(function(photo){ return photo.id; });
-        p.photo = p.photos[0] || p.photo;
         galleryImages = p.photos.filter(Boolean).slice(0,6).map(function(url, index){ return {id:p.photoIds[index] || null, url:url}; });
         galleryUploadStatus.className = 'gallery-upload-status success';
         galleryUploadStatus.textContent = 'Photo order saved online.';
@@ -837,23 +836,6 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
     }
   }
 
-  function makeFallbackAvatar(p){
-    if(!p.photo){
-      var illustration = document.createElement('img');
-      illustration.className = 'placeholder-illustration';
-      illustration.alt = placeholderLabel(p);
-      illustration.src = illustrationUrl(p);
-      illustration.onerror = function(){ illustration.onerror = null; illustration.src = illustrationFallbackUrl(p); };
-      return illustration;
-    }
-    return makeInitialsFallback(p);
-  }
-  function makeInitialsFallback(p){
-    var fallback = document.createElement('div');
-    fallback.className = 'initials gen' + Math.max(0, Math.min(structDepth[p.id] || 0, 5));
-    fallback.textContent = initials(p.name);
-    return fallback;
-  }
 
   function relationLink(person, label){
     var link = document.createElement('button');
@@ -921,7 +903,7 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
   function openDetails(p){
     editingPerson = p;
     detailsEditor.classList.remove('open');
-    var photos = Array.isArray(p.photos) ? p.photos : (p.photo ? [p.photo] : []);
+    var photos = Array.isArray(p.photos) ? p.photos : [];
     galleryImages = photos.filter(Boolean).slice(0,6).map(function(url, index){ return {id:(p.photoIds || [])[index] || null, url:url}; });
     galleryIndex = 0;
     pendingGallerySlot = -1;
@@ -998,7 +980,6 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
       .then(function(result){
         editingPerson.photos = result.photos || galleryImages.map(function(photo){ return photo.url; }).concat(result.url || []);
         editingPerson.photoIds = result.photoIds || galleryImages.map(function(photo){ return photo.id; });
-        editingPerson.photo = editingPerson.photos[0] || editingPerson.photo;
         galleryImages = editingPerson.photos.filter(Boolean).slice(0,6).map(function(url, index){ return {id:editingPerson.photoIds[index] || null, url:url}; });
         galleryUploadInput.value = '';
         galleryUploadStatus.className = 'gallery-upload-status success';

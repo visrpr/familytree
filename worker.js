@@ -1,5 +1,4 @@
 const MAX_IMAGE_BYTES = 32 * 1024 * 1024;
-const IMGBB_ENDPOINT = 'https://api.imgbb.com/1/upload';
 
 function corsHeaders(origin) {
   return {
@@ -49,28 +48,10 @@ function photoUrl(request, objectKey, env) {
   return `https://${host}/media/${objectKey.split('/').map(encodeURIComponent).join('/')}`;
 }
 
-function legacyPhotos(source, personId) {
-  const escapedId = personId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = source.match(new RegExp(`^\\{id:"${escapedId}"[^\\n]*$`, 'm'));
-  if (!match) return [];
-  const photos = match[0].match(/,photos:(\[[^\n]*?\])/);
-  if (!photos) return [];
-  try { return JSON.parse(photos[1]).filter(Boolean).slice(0, 6); } catch (error) { return []; }
-}
-
 async function storedPhotos(env, personId) {
   if (!env.DB) return [];
   const result = await env.DB.prepare('SELECT id, url, object_key FROM photos WHERE person_id = ? ORDER BY sort_order, id').bind(personId).all();
   return (result.results || []).filter(row => row.url).map(row => ({ id: row.id, url: row.url, objectKey: row.object_key || null }));
-}
-
-async function savePhotoRows(env, personId, photos) {
-  if (!env.DB) return;
-  const statements = [env.DB.prepare('DELETE FROM photos WHERE person_id = ?').bind(personId)];
-  photos.slice(0, 6).forEach((photo, index) => {
-    statements.push(env.DB.prepare('INSERT INTO photos (person_id, url, object_key, sort_order) VALUES (?, ?, ?, ?)').bind(personId, photo.url, photo.objectKey || null, index));
-  });
-  await env.DB.batch(statements);
 }
 
 async function photoRows(env, personId) {
@@ -79,8 +60,13 @@ async function photoRows(env, personId) {
 }
 
 async function reorderPhotoRows(env, personId, photoIds) {
-  const statements = photoIds.slice(0, 6).map((id, index) => env.DB.prepare('UPDATE photos SET sort_order = ? WHERE id = ? AND person_id = ?').bind(index, id, personId));
-  if (statements.length) await env.DB.batch(statements);
+  const rows = await photoRows(env, personId);
+  const knownIds = rows.map(row => row.id).sort((a, b) => a - b);
+  const requestedIds = photoIds.slice(0, 6);
+  if (requestedIds.length !== rows.length || requestedIds.slice().sort((a, b) => a - b).some((id, index) => id !== knownIds[index])) {
+    throw new Error('The photo list changed. Refresh and try again.');
+  }
+  await env.DB.batch(requestedIds.map((id, index) => env.DB.prepare('UPDATE photos SET sort_order = ? WHERE id = ? AND person_id = ?').bind(index, id, personId)));
   return photoRows(env, personId);
 }
 
@@ -150,20 +136,6 @@ function updatePersonRecord(source, personId, fields) {
   return source.replace(match[1], record);
 }
 
-async function uploadToImgBB(image, apiKey) {
-  const form = new FormData();
-  form.append('image', image, image.name || 'family-photo');
-  const response = await fetch(`${IMGBB_ENDPOINT}?key=${encodeURIComponent(apiKey)}`, {
-    method: 'POST',
-    body: form
-  });
-  const result = await response.json();
-  if (!response.ok || result.success === false) throw new Error('ImgBB rejected the image upload.');
-  const imageUrl = result.data && (result.data.display_url || result.data.url);
-  if (!imageUrl) throw new Error('ImgBB returned no image URL.');
-  return imageUrl;
-}
-
 async function commitFamilyData(source, sha, personId, fields, env) {
   const updated = updatePersonRecord(source, personId, fields);
   if (!updated) throw new Error('The requested family member was not found.');
@@ -220,15 +192,12 @@ export default {
     if (!['/api/upload', '/api/update', '/api/reorder'].includes(url.pathname) || request.method !== 'POST') return json({ error: 'Not found' }, 404, responseOrigin);
     if (requestOrigin && requestOrigin !== allowedOrigin) return json({ error: 'Origin not allowed.' }, 403, responseOrigin);
     if (!isAuthorized(request, env)) return json({ error: 'Admin authorization is required.' }, 401, responseOrigin);
-    if (!env.GITHUB_TOKEN || !env.GITHUB_OWNER || !env.GITHUB_REPOSITORY || (url.pathname === '/api/upload' && !env.IMGBB_API_KEY)) {
-      return json({ error: 'Upload service is not configured.' }, 503, responseOrigin);
-    }
-
     try {
       let personId;
       let fields;
       let requestedPhotoIds = [];
       if (url.pathname === '/api/upload') {
+        if (!env.DB || !env.PHOTOS) return json({ error: 'Photo storage is not configured.' }, 503, responseOrigin);
         if (!request.headers.get('Content-Type')?.toLowerCase().includes('multipart/form-data')) {
           return json({ error: 'Upload must use multipart/form-data.' }, 415, responseOrigin);
         }
@@ -239,22 +208,23 @@ export default {
           return json({ error: 'A valid image file is required.' }, 400, responseOrigin);
         }
         if (image.size > MAX_IMAGE_BYTES) return json({ error: 'Image must be smaller than 32 MB.' }, 413, responseOrigin);
-        if (env.PHOTOS && env.DB) {
-          const source = await readGitHubFamilyData(env);
-          const stored = await storedPhotos(env, personId);
-          const existingPhotos = stored.length ? stored : legacyPhotos(source.source, personId).map(url => ({ url, objectKey: null }));
-          const safeName = (image.name || 'photo').replace(/[^a-zA-Z0-9._-]/g, '-').slice(-80);
-          const objectKey = `${personId}/${crypto.randomUUID()}-${safeName}`;
-          await env.PHOTOS.put(objectKey, image.stream(), { httpMetadata: { contentType: image.type } });
-          const imageUrl = photoUrl(request, objectKey, env);
-          const photos = form.get('replaceCardPhoto') === 'true' ? [{ url: imageUrl, objectKey }].concat(existingPhotos.slice(1)) : existingPhotos.concat({ url: imageUrl, objectKey }).slice(0, 6);
-          await savePhotoRows(env, personId, photos);
-          const rows = await photoRows(env, personId);
-          return json({ success: true, url: imageUrl, photos: rows.map(photo => photo.url), photoIds: rows.map(photo => photo.id) }, 200, responseOrigin);
+        const stored = await storedPhotos(env, personId);
+        const replaceCardPhoto = form.get('replaceCardPhoto') === 'true';
+        if (!replaceCardPhoto && stored.length >= 6) return json({ error: 'The gallery already has six photos.' }, 400, responseOrigin);
+        const safeName = (image.name || 'photo').replace(/[^a-zA-Z0-9._-]/g, '-').slice(-80);
+        const objectKey = `${personId}/${crypto.randomUUID()}-${safeName}`;
+        await env.PHOTOS.put(objectKey, image.stream(), { httpMetadata: { contentType: image.type } });
+        const imageUrl = photoUrl(request, objectKey, env);
+        if (replaceCardPhoto && stored.length) {
+          await env.DB.prepare('UPDATE photos SET url = ?, object_key = ? WHERE id = ? AND person_id = ?').bind(imageUrl, objectKey, stored[0].id, personId).run();
+        } else {
+          await env.DB.prepare('INSERT INTO photos (person_id, url, object_key, sort_order) VALUES (?, ?, ?, ?)').bind(personId, imageUrl, objectKey, replaceCardPhoto ? 0 : stored.length).run();
         }
-        const imageUrl = await uploadToImgBB(image, env.IMGBB_API_KEY);
-        fields = { photos: [imageUrl], replaceCardPhoto: form.get('replaceCardPhoto') === 'true' };
+        const rows = await photoRows(env, personId);
+        return json({ success: true, url: imageUrl, photos: rows.map(photo => photo.url), photoIds: rows.map(photo => photo.id) }, 200, responseOrigin);
       } else {
+        if (url.pathname === '/api/update' && (!env.GITHUB_TOKEN || !env.GITHUB_OWNER || !env.GITHUB_REPOSITORY)) return json({ error: 'Profile editing is not configured.' }, 503, responseOrigin);
+        if (url.pathname === '/api/reorder' && !env.DB) return json({ error: 'Photo storage is not configured.' }, 503, responseOrigin);
         if (!request.headers.get('Content-Type')?.toLowerCase().includes('application/json')) {
           return json({ error: 'Update must use JSON.' }, 415, responseOrigin);
         }
@@ -274,8 +244,7 @@ export default {
           const rows = await reorderPhotoRows(env, personId, requestedPhotoIds);
           return json({ success: true, photos: rows.map(photo => photo.url), photoIds: rows.map(photo => photo.id) }, 200, responseOrigin);
         }
-        await savePhotoRows(env, personId, fields.photos.map(url => ({ url, objectKey: null })));
-        return json({ success: true, photos: fields.photos, photoIds: (await photoRows(env, personId)).map(photo => photo.id) }, 200, responseOrigin);
+        throw new Error('Photo IDs are required. Refresh the gallery and try again.');
       }
 
       const updated = await updateGitHubFamilyData(personId, fields, env);

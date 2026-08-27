@@ -14,7 +14,7 @@ Welcome to the repository for our family history website! This project is a digi
 
 ## Storage and deployment
 
-Photos are stored in the Cloudflare R2 bucket `family-tree-photos`. Photo metadata and ordering are stored in the Cloudflare D1 database `family-tree`. Existing GitHub/ImgBB photos remain available as a legacy fallback, while new uploads use R2.
+Photos are stored in the Cloudflare R2 bucket `family-tree-photos`. Photo metadata and ordering are stored in the Cloudflare D1 database `family-tree`. New photos must be uploaded through the family tree editor.
 
 The Cloudflare resources and initial D1 migration are already set up. The binding IDs are recorded in `wrangler.jsonc`, and private secrets are stored in Cloudflare rather than Git.
 
