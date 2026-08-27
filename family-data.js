@@ -104,7 +104,7 @@ const family = [
 {id:"pandurang-bhandarkar",name:"Pandurang Bhandarkar",gender:"male",birth:"",death:"",spouse:"shambavi-bhandarker",children:["dhruti"]},
 {id:"shambavi-bhandarker",name:"Shambavi Bhandarker",gender:"female",birth:"",death:"",spouse:"pandurang-bhandarkar",children:[]},
 {id:"dhruti",name:"Dhruti",gender:"female",birth:"",death:"",children:[]},
-{id:"bhumika",name:"Bhumika",gender:"female",birth:"",death:"",children:[]},
+{id:"bhumika",name:"Bhumika S Prabhu",gender:"female",birth:"1997",death:"2018",children:[]},
 {id:"vijay",name:"Vijay S Prabhu",gender:"male",birth:"",death:"",photos:["https://i.ibb.co/N68KLkkX/artistic-silhouette-portrait-man-profile-260nw-2689672843.jpg"],photos:["https://i.ibb.co/B5vC6g8J/artistic-silhouette-portrait-man-profile-260nw-2689672843.jpg"],photos:["https://i.ibb.co/jkjp6Cvp/Digital-Photo.jpg"],photos:["https://i.ibb.co/YYWkDNn/PXL-20230312-103814451-2.jpg"],children:[]},
 {id:"rajesh",name:"Rajesh",gender:"male",birth:"",death:"",children:["miraya"]},
 {id:"miraya",name:"Miraya",gender:"female",birth:"",death:"",children:[]},
