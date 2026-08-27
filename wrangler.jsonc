@@ -19,7 +19,7 @@
 			"database_name": "family-tree",
 			"database_id": "a0b82492-568b-4a0f-becf-63a0bf339c56",
 			"migrations_dir": "migrations"
-		},
+		}
 	],
 	"r2_buckets": [
 		{
