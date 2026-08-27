@@ -60,29 +60,44 @@ function legacyPhotos(source, personId) {
 
 async function storedPhotos(env, personId) {
   if (!env.DB) return [];
-  const result = await env.DB.prepare('SELECT url FROM photos WHERE person_id = ? ORDER BY sort_order, id').bind(personId).all();
-  return (result.results || []).map(row => row.url).filter(Boolean);
+  const result = await env.DB.prepare('SELECT id, url, object_key FROM photos WHERE person_id = ? ORDER BY sort_order, id').bind(personId).all();
+  return (result.results || []).filter(row => row.url).map(row => ({ id: row.id, url: row.url, objectKey: row.object_key || null }));
 }
 
 async function savePhotoRows(env, personId, photos) {
   if (!env.DB) return;
   const statements = [env.DB.prepare('DELETE FROM photos WHERE person_id = ?').bind(personId)];
-  photos.slice(0, 6).forEach((url, index) => {
-    statements.push(env.DB.prepare('INSERT INTO photos (person_id, url, sort_order) VALUES (?, ?, ?)').bind(personId, url, index));
+  photos.slice(0, 6).forEach((photo, index) => {
+    statements.push(env.DB.prepare('INSERT INTO photos (person_id, url, object_key, sort_order) VALUES (?, ?, ?, ?)').bind(personId, photo.url, photo.objectKey || null, index));
   });
   await env.DB.batch(statements);
 }
 
+async function photoRows(env, personId) {
+  const result = await env.DB.prepare('SELECT id, url FROM photos WHERE person_id = ? ORDER BY sort_order, id').bind(personId).all();
+  return (result.results || []).map(row => ({ id: row.id, url: row.url }));
+}
+
+async function reorderPhotoRows(env, personId, photoIds) {
+  const statements = photoIds.slice(0, 6).map((id, index) => env.DB.prepare('UPDATE photos SET sort_order = ? WHERE id = ? AND person_id = ?').bind(index, id, personId));
+  if (statements.length) await env.DB.batch(statements);
+  return photoRows(env, personId);
+}
+
 async function dataWithStoredPhotos(source, env) {
   if (!env.DB) return source;
-  const result = await env.DB.prepare('SELECT person_id, url FROM photos ORDER BY person_id, sort_order, id').all();
+  const result = await env.DB.prepare('SELECT person_id, id, url FROM photos ORDER BY person_id, sort_order, id').all();
   const grouped = {};
   (result.results || []).forEach(row => {
     if (!grouped[row.person_id]) grouped[row.person_id] = [];
-    if (row.url) grouped[row.person_id].push(row.url);
+    if (row.url) grouped[row.person_id].push({ id: row.id, url: row.url });
   });
   Object.keys(grouped).forEach(personId => {
-    source = updatePersonRecord(source, personId, { photos: grouped[personId], replacePhotos: true });
+    source = updatePersonRecord(source, personId, {
+      photos: grouped[personId].map(photo => photo.url),
+      photoIds: grouped[personId].map(photo => photo.id),
+      replacePhotos: true
+    });
   });
   return source;
 }
@@ -212,6 +227,7 @@ export default {
     try {
       let personId;
       let fields;
+      let requestedPhotoIds = [];
       if (url.pathname === '/api/upload') {
         if (!request.headers.get('Content-Type')?.toLowerCase().includes('multipart/form-data')) {
           return json({ error: 'Upload must use multipart/form-data.' }, 415, responseOrigin);
@@ -226,14 +242,15 @@ export default {
         if (env.PHOTOS && env.DB) {
           const source = await readGitHubFamilyData(env);
           const stored = await storedPhotos(env, personId);
-          const existingPhotos = stored.length ? stored : legacyPhotos(source.source, personId);
+          const existingPhotos = stored.length ? stored : legacyPhotos(source.source, personId).map(url => ({ url, objectKey: null }));
           const safeName = (image.name || 'photo').replace(/[^a-zA-Z0-9._-]/g, '-').slice(-80);
           const objectKey = `${personId}/${crypto.randomUUID()}-${safeName}`;
           await env.PHOTOS.put(objectKey, image.stream(), { httpMetadata: { contentType: image.type } });
           const imageUrl = photoUrl(request, objectKey, env);
-          const photos = form.get('replaceCardPhoto') === 'true' ? [imageUrl].concat(existingPhotos.slice(1)) : existingPhotos.concat(imageUrl).slice(0, 6);
+          const photos = form.get('replaceCardPhoto') === 'true' ? [{ url: imageUrl, objectKey }].concat(existingPhotos.slice(1)) : existingPhotos.concat({ url: imageUrl, objectKey }).slice(0, 6);
           await savePhotoRows(env, personId, photos);
-          return json({ success: true, url: imageUrl, photos }, 200, responseOrigin);
+          const rows = await photoRows(env, personId);
+          return json({ success: true, url: imageUrl, photos: rows.map(photo => photo.url), photoIds: rows.map(photo => photo.id) }, 200, responseOrigin);
         }
         const imageUrl = await uploadToImgBB(image, env.IMGBB_API_KEY);
         fields = { photos: [imageUrl], replaceCardPhoto: form.get('replaceCardPhoto') === 'true' };
@@ -243,6 +260,7 @@ export default {
         }
         const body = await request.json();
         personId = String(body.personId || '');
+        requestedPhotoIds = Array.isArray(body.photoIds) ? body.photoIds.filter(id => Number.isInteger(id)) : [];
         fields = url.pathname === '/api/reorder'
           ? { photos: Array.isArray(body.photos) ? body.photos.filter(photo => typeof photo === 'string' && photo).slice(0, 6) : [], replacePhotos: true }
           : { name: String(body.name || '').trim(), birth: String(body.birth || '').trim(), death: String(body.death || '').trim() };
@@ -252,8 +270,12 @@ export default {
       if (!/^[a-z0-9-]+$/.test(personId)) return json({ error: 'A valid family member is required.' }, 400, responseOrigin);
 
       if (url.pathname === '/api/reorder' && env.DB) {
-        await savePhotoRows(env, personId, fields.photos);
-        return json({ success: true, photos: fields.photos }, 200, responseOrigin);
+        if (requestedPhotoIds.length) {
+          const rows = await reorderPhotoRows(env, personId, requestedPhotoIds);
+          return json({ success: true, photos: rows.map(photo => photo.url), photoIds: rows.map(photo => photo.id) }, 200, responseOrigin);
+        }
+        await savePhotoRows(env, personId, fields.photos.map(url => ({ url, objectKey: null })));
+        return json({ success: true, photos: fields.photos, photoIds: (await photoRows(env, personId)).map(photo => photo.id) }, 200, responseOrigin);
       }
 
       const updated = await updateGitHubFamilyData(personId, fields, env);
