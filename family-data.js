@@ -36,7 +36,7 @@
 
 	Keep every id used in spouse or children in this same list.
 */
-const family = [
+var family = [
 // Family founder
 {id:"padmanabh",name:"Padmanabh Prabhu",gender:"male",birth:"1900",death:"2000",children:["ganga","dutt","ram","krishna"]},
 {id:"ganga",name:"Ganga Prabhu",gender:"female",birth:"",death:"",children:[]},

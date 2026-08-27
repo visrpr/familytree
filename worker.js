@@ -59,7 +59,7 @@ function updatePersonRecord(source, personId, fields) {
 
   let record = match[1];
   Object.entries(fields).forEach(([field, value]) => {
-    if (field === 'replaceCardPhoto' || value === undefined) return;
+    if (field === 'replaceCardPhoto' || field === 'replacePhotos' || value === undefined) return;
     const fieldPattern = new RegExp(`,${field}:(?:"(?:\\\\.|[^"\\\\])*"|\\[[^\\n]*?\\])`);
     let nextValue = value;
     const existingFields = field === 'photos' ? record.match(new RegExp(fieldPattern.source, 'g')) : null;
@@ -68,7 +68,9 @@ function updatePersonRecord(source, personId, fields) {
         const existingPhotos = existingFields.reduce(function(photos, existingField){
           return photos.concat(JSON.parse(existingField.slice(existingField.indexOf(':') + 1)));
         }, []);
-        nextValue = fields.replaceCardPhoto
+        nextValue = fields.replacePhotos
+          ? value.slice(0, 6)
+          : fields.replaceCardPhoto
           ? value.slice(0, 1).concat(existingPhotos.slice(1)).slice(0, 6)
           : existingPhotos.concat(value.filter(photo => !existingPhotos.includes(photo))).slice(0, 6);
       } catch (error) {
@@ -173,7 +175,7 @@ export default {
         const body = await request.json();
         personId = String(body.personId || '');
         fields = url.pathname === '/api/reorder'
-          ? { photos: Array.isArray(body.photos) ? body.photos.filter(photo => typeof photo === 'string' && photo).slice(0, 6) : [] }
+          ? { photos: Array.isArray(body.photos) ? body.photos.filter(photo => typeof photo === 'string' && photo).slice(0, 6) : [], replacePhotos: true }
           : { name: String(body.name || '').trim(), birth: String(body.birth || '').trim(), death: String(body.death || '').trim() };
         if (url.pathname === '/api/reorder' && !fields.photos.length) return json({ error: 'At least one photo is required.' }, 400, responseOrigin);
         if (url.pathname === '/api/update' && !fields.name) return json({ error: 'A name is required.' }, 400, responseOrigin);
