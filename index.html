@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Prabhu Family Tree</title>
+<meta name="description" content="Explore the interactive Prabhu family tree: generations, lineage branches, historical photos, a timeline, and statistics.">
+<meta name="theme-color" content="#f0ebde">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'unsafe-inline' 'self' https://family-tree.visrpr.workers.dev; style-src 'unsafe-inline' 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://i.postimg.cc https://family-tree.visrpr.workers.dev https://api.dicebear.com; media-src https://od.lk https://family-tree.visrpr.workers.dev; connect-src 'self' https://formsubmit.co https://family-tree.visrpr.workers.dev; object-src 'none'; frame-ancestors 'none'; base-uri 'self'">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Aleo:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@500;600&display=swap" rel="stylesheet">
@@ -350,6 +354,7 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
         <input id="zoomSlider" class="zoom-slider" type="range" min="0.1" max="1.6" step="0.01" value="1" aria-label="Zoom level">
         <button id="in" type="button" aria-label="Zoom in">+</button>
       </div>
+      <button id="soundToggle" class="legend-toggle" type="button" aria-pressed="false" title="Toggle page-turn sound">🔊</button>
       <button class="submit-open" id="submitOpen" type="button">Submit family info</button>
     </div>
   </div>
@@ -526,7 +531,8 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
   var galleryUploadInput = document.getElementById('galleryUploadInput');
   var galleryUploadStatus = document.getElementById('galleryUploadStatus');
   var editingPerson = null;
-  var pageTurnSound = new Audio('https://od.lk/s/OF8yMDg3OTg5MjRfQzJZb0E/pageturn.mp3');
+  var pageTurnSound = null;
+  var soundMuted = localStorage.getItem('familyTreeSoundMuted') === '1';
   var galleryImages = [];
   var galleryIndex = 0;
   var pendingGallerySlot = -1;
@@ -538,7 +544,10 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
   var filterButton = document.getElementById('filterButton');
   var filterPanel = document.getElementById('filterPanel');
   var labelsToggle = document.getElementById('labelsToggle');
+  var soundToggle = document.getElementById('soundToggle');
   nodesLayer.classList.add('labels-hidden');
+  function renderSoundToggle(){ soundToggle.textContent = soundMuted ? '🔇' : '🔊'; soundToggle.setAttribute('aria-pressed', String(soundMuted)); }
+  renderSoundToggle();
 
   function adminHeaders(headers){
     var result = headers || {};
@@ -560,6 +569,11 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
     e.stopPropagation();
     var isOpen = filterPanel.classList.toggle('open');
     filterButton.setAttribute('aria-expanded', String(isOpen));
+  });
+  soundToggle.addEventListener('click', function(e){
+    e.stopPropagation();
+    toggleSound();
+    renderSoundToggle();
   });
   labelsToggle.addEventListener('change', function(){
     nodesLayer.classList.toggle('labels-hidden', !labelsToggle.checked);
@@ -648,7 +662,7 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
     if(p.birth && p.death) return p.birth + '-' + p.death;
     if(p.birth && !p.death) return p.birth + '–Living';
     if(!p.birth && p.death) return 'd. ' + p.death;
-    return '0000-0000';
+    return '';
   }
   function relLabel(gender){ return gender === 'female' ? 'Daughter' : gender === 'male' ? 'Son' : 'Child'; }
   function spouseLabel(){ return 'Partner'; }
@@ -789,7 +803,7 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
         galleryUploadStatus.className = 'gallery-upload-status success';
         galleryUploadStatus.textContent = 'Photo order saved online.';
         renderGallery(p);
-        render();
+        scheduleRender();
       })
       .catch(function(error){ galleryUploadStatus.textContent = error.message || 'Could not save photo order.'; renderGallery(p); });
   }
@@ -944,7 +958,7 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
     editingPerson.death = editDeath.value.trim();
     var persist = function(){
       detailsEditor.classList.remove('open');
-      render();
+      scheduleRender();
       updateStatsAndLegend();
       openDetails(editingPerson);
     };
@@ -1045,9 +1059,16 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
   });
 
   function playPageTurnSound(){
+    if(soundMuted) return;
+    if(!pageTurnSound) pageTurnSound = new Audio('https://od.lk/s/OF8yMDg3OTg5MjRfQzJZb0E/pageturn.mp3');
     pageTurnSound.currentTime = 0;
     var playback = pageTurnSound.play();
     if(playback && playback.catch) playback.catch(function(){});
+  }
+  function toggleSound(){
+    soundMuted = !soundMuted;
+    localStorage.setItem('familyTreeSoundMuted', soundMuted ? '1' : '0');
+    if(!soundMuted && pageTurnSound) pageTurnSound.play().catch(function(){});
   }
 
   function makeCard(p, opts){
@@ -1080,6 +1101,16 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
     label.style.left = (centerX + PAD) + 'px';
     label.style.top = (top + (placement === 'side' ? 4 : placement ? 0 : -18)) + 'px';
     return label;
+  }
+
+  var renderQueued = false;
+  function scheduleRender(){
+    if(renderQueued) return;
+    renderQueued = true;
+    requestAnimationFrame(function(){
+      renderQueued = false;
+      render();
+    });
   }
 
   function render(){
@@ -1338,6 +1369,7 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
       });
     }
 
+    var allCards = Array.prototype.slice.call(nodesLayer.querySelectorAll('.person'));
     familyBranchCards.forEach(function(branchCard){
       var moved = true;
       while(moved){
@@ -1346,8 +1378,9 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
         var branchTop = parseFloat(branchCard.style.top);
         var branchRight = branchLeft + branchCard.offsetWidth;
         var branchBottom = branchTop + branchCard.offsetHeight;
-        Array.prototype.forEach.call(nodesLayer.querySelectorAll('.person'), function(otherCard){
-          if(otherCard === branchCard) return;
+        for(var oi = 0; oi < allCards.length; oi++){
+          var otherCard = allCards[oi];
+          if(otherCard === branchCard) continue;
           var otherLeft = parseFloat(otherCard.style.left);
           var otherTop = parseFloat(otherCard.style.top);
           var otherRight = otherLeft + otherCard.offsetWidth;
@@ -1359,7 +1392,7 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
             moveFamilyBranchCard(branchCard, deltaX);
             moved = true;
           }
-        });
+        }
       }
     });
 
@@ -1468,7 +1501,9 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
     });
   }
   function applyScale(){
-    canvas.style.transform = 'none';
+    // `zoom` (standardized) affects layout so the viewport scroll area matches the
+    // scaled size, keeping the focus/pinch/wheel geometry correct. A CSS transform
+    // would not grow the scrollable overflow and would require separate scroll math.
     canvas.style.zoom = scale;
     canvas.style.width = canvasWidth + 'px';
     canvas.style.height = canvasHeight + 'px';
@@ -1801,6 +1836,25 @@ header{padding:14px 26px 13px;border-bottom:1px solid rgba(184,157,111,.5);backg
   render();
   updateStatsAndLegend();
   requestAnimationFrame(fitToScreen);
+
+  // Indexable summary of the family tree for engines and screen readers (kept
+  // small; full genealogy lives in the interactive tree and /api/data.js).
+  var familyNodes = RAW.map(function(person){
+    return {
+      '@type':'Person',
+      name:person.name,
+      additionalName:person.maidenName,
+      gender:person.gender === 'male' ? 'Male' : person.gender === 'female' ? 'Female' : 'Unknown',
+      birthDate:person.birth || undefined,
+      deathDate:person.death || undefined,
+      parent: (person.parents && person.parents.map(function(id){ return { '@id':'#'+id }; })) || undefined
+    };
+  });
+  var jsonLd = { '@context':'https://schema.org', '@graph': familyNodes };
+  var ldScript = document.createElement('script');
+  ldScript.type = 'application/ld+json';
+  ldScript.textContent = JSON.stringify(jsonLd);
+  document.head.appendChild(ldScript);
 })();
 </script>
 </body>

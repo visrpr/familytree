@@ -28,4 +28,11 @@ npx wrangler deploy --config D:\FamilyTree\familytree\wrangler.jsonc
 
 If the family seed data must be rebuilt from `family-data.js`, run `node scripts/seed-people.js` once. It replaces the D1 people records; it does not touch photos.
 
+Seed options (run from this folder):
+- `node scripts/seed-people.js --dry-run` — preview the SQL without touching the database.
+- `node scripts/seed-people.js --yes` — skip the confirmation prompt.
+- `node scripts/seed-people.js --merge` — upsert records by id instead of deleting the table first (preserves rows added outside the seed).
+
+Run the Worker/seed unit tests with `node scripts/run-tests.js`.
+
 The admin token is requested the first time you upload, edit, or arrange a photo. It is kept only in that browser session. Do not commit or share the token. Updates to `index.html` are published through the GitHub Pages deployment.

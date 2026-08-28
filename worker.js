@@ -1,29 +1,71 @@
 const MAX_IMAGE_BYTES = 32 * 1024 * 1024;
 
+const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+// Per-isolate, best-effort rate limiting for admin endpoints.
+const RATE_LIMIT = {
+  upload: { windowMs: 60 * 1000, max: 10 },
+  default: { windowMs: 60 * 1000, max: 30 }
+};
+
+function securityHeaders() {
+  return {
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'X-Frame-Options': 'DENY',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()'
+  };
+}
+
 function corsHeaders(origin) {
   return {
     'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Headers': 'Content-Type, Accept',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Vary': 'Origin'
+    'Vary': 'Origin',
+    ...securityHeaders()
   };
 }
 
 function json(data, status, origin) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) }
+    headers: { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders(origin) }
   });
 }
 
 function isAuthorized(request, env) {
-  if (!env.ADMIN_TOKEN) return true;
+  if (!env.ADMIN_TOKEN) return false;
   return request.headers.get('Authorization') === `Bearer ${env.ADMIN_TOKEN}`;
+}
+
+function clientKeyFrom(request) {
+  const forwarded = request.headers.get('CF-Connecting-IP');
+  if (forwarded) return forwarded;
+  return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+}
+
+const rateBuckets = new Map();
+function rateLimited(key, category) {
+  const limits = RATE_LIMIT[category] || RATE_LIMIT.default;
+  const now = Date.now();
+  let bucket = rateBuckets.get(key);
+  if (!bucket || bucket.windowUntil <= now) {
+    bucket = { windowUntil: now + limits.windowMs, count: 0 };
+    rateBuckets.set(key, bucket);
+  }
+  if (rateBuckets.size > 5000) rateBuckets.clear();
+  bucket.count += 1;
+  return bucket.count > limits.max;
 }
 
 function photoUrl(request, objectKey, env) {
   const host = env.PHOTOS_HOST || new URL(request.url).host;
   return `https://${host}/media/${objectKey.split('/').map(encodeURIComponent).join('/')}`;
+}
+
+function safeContentType(requested) {
+  const base = String(requested || '').split(';')[0].trim().toLowerCase();
+  return IMAGE_MIME_TYPES.has(base) ? base : null;
 }
 
 async function storedPhotos(env, personId) {
@@ -37,13 +79,21 @@ async function photoRows(env, personId) {
   return (result.results || []).map(row => ({ id: row.id, url: row.url }));
 }
 
+function reorderIdsValid(knownIds, requestedIds) {
+  const normalized = requestedIds.slice(0, 6);
+  if (normalized.length !== knownIds.length) return false;
+  const sortedKnown = knownIds.slice().sort((a, b) => a - b);
+  const sortedRequested = normalized.slice().sort((a, b) => a - b);
+  return sortedRequested.every((id, index) => id === sortedKnown[index]);
+}
+
 async function reorderPhotoRows(env, personId, photoIds) {
   const rows = await photoRows(env, personId);
-  const knownIds = rows.map(row => row.id).sort((a, b) => a - b);
-  const requestedIds = photoIds.slice(0, 6);
-  if (requestedIds.length !== rows.length || requestedIds.slice().sort((a, b) => a - b).some((id, index) => id !== knownIds[index])) {
+  const knownIds = rows.map(row => row.id);
+  if (!reorderIdsValid(knownIds, photoIds)) {
     throw new Error('The photo list changed. Refresh and try again.');
   }
+  const requestedIds = photoIds.slice(0, 6);
   await env.DB.batch(requestedIds.map((id, index) => env.DB.prepare('UPDATE photos SET sort_order = ? WHERE id = ? AND person_id = ?').bind(index, id, personId)));
   return photoRows(env, personId);
 }
@@ -101,11 +151,23 @@ export default {
       const objectKey = url.pathname.slice('/media/'.length).split('/').map(decodeURIComponent).join('/');
       const object = await env.PHOTOS.get(objectKey);
       if (!object) return new Response('Not found', { status: 404 });
-      return new Response(object.body, { headers: { 'Cache-Control': 'public, max-age=31536000, immutable', 'Content-Type': object.httpMetadata?.contentType || 'image/jpeg' } });
+      const contentType = safeContentType(object.httpMetadata?.contentType) || 'image/jpeg';
+      return new Response(object.body, {
+        headers: {
+          'Cache-Control': 'public, max-age=31536000, immutable',
+          'Content-Type': contentType,
+          'X-Content-Type-Options': 'nosniff',
+          'Content-Security-Policy': "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox"
+        }
+      });
     }
     if (!['/api/upload', '/api/update', '/api/reorder'].includes(url.pathname) || request.method !== 'POST') return json({ error: 'Not found' }, 404, responseOrigin);
     if (requestOrigin && requestOrigin !== allowedOrigin) return json({ error: 'Origin not allowed.' }, 403, responseOrigin);
     if (!isAuthorized(request, env)) return json({ error: 'Admin authorization is required.' }, 401, responseOrigin);
+    const clientKey = clientKeyFrom(request);
+    if (rateLimited(clientKey, url.pathname === '/api/upload' ? 'upload' : 'default')) {
+      return json({ error: 'Too many requests. Please slow down and try again.' }, 429, responseOrigin);
+    }
     try {
       let personId;
       let fields;
@@ -118,8 +180,12 @@ export default {
         const form = await request.formData();
         const image = form.get('image');
         personId = String(form.get('personId') || '');
-        if (!(image instanceof File) || !image.size || !image.type.startsWith('image/')) {
+        if (!(image instanceof File) || !image.size) {
           return json({ error: 'A valid image file is required.' }, 400, responseOrigin);
+        }
+        const contentType = safeContentType(image.type);
+        if (!contentType) {
+          return json({ error: 'Only JPEG, PNG, WebP, and GIF images are accepted.' }, 415, responseOrigin);
         }
         if (image.size > MAX_IMAGE_BYTES) return json({ error: 'Image must be smaller than 32 MB.' }, 413, responseOrigin);
         const stored = await storedPhotos(env, personId);
@@ -127,7 +193,7 @@ export default {
         if (!replaceCardPhoto && stored.length >= 6) return json({ error: 'The gallery already has six photos.' }, 400, responseOrigin);
         const safeName = (image.name || 'photo').replace(/[^a-zA-Z0-9._-]/g, '-').slice(-80);
         const objectKey = `${personId}/${crypto.randomUUID()}-${safeName}`;
-        await env.PHOTOS.put(objectKey, image.stream(), { httpMetadata: { contentType: image.type } });
+        await env.PHOTOS.put(objectKey, image.stream(), { httpMetadata: { contentType } });
         const imageUrl = photoUrl(request, objectKey, env);
         if (replaceCardPhoto && stored.length) {
           await env.DB.prepare('UPDATE photos SET url = ?, object_key = ? WHERE id = ? AND person_id = ?').bind(imageUrl, objectKey, stored[0].id, personId).run();
@@ -161,8 +227,10 @@ export default {
       if (!result.meta.changes) return json({ error: 'The requested family member was not found.' }, 404, responseOrigin);
       return json({ success: true }, 200, responseOrigin);
     } catch (error) {
-      console.error(JSON.stringify({ message: 'Image upload failed', error: error instanceof Error ? error.message : String(error) }));
-      return json({ error: error instanceof Error ? error.message : 'Image upload failed.' }, 502, responseOrigin);
+      console.error(JSON.stringify({ path: url.pathname, message: `${url.pathname} failed`, error: error instanceof Error ? error.message : String(error) }));
+      return json({ error: error instanceof Error ? error.message : `${url.pathname} failed.` }, 502, responseOrigin);
     }
   }
 };
+
+export { isAuthorized, safeContentType, reorderIdsValid, rateLimited };

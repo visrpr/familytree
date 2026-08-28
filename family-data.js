@@ -4,13 +4,10 @@
 	Add or edit one person object per line:
 	- id: unique lowercase identifier. Do not change it after linking children.
 	- name: name shown on the family tree and detail page.
-	- name: name shown on the family tree and detail page.
 	- maidenName: optional unmarried name shown beneath the main name in brackets.
 	- gender: male, female, or unknown.
 	- birth / death: use four-digit years, or an empty string when unknown.
-	- birth / death: use four-digit years, or an empty string when unknown.
 	- marriage / divorce or marriageYear / divorceYear: optional four-digit timeline event years.
-	- spouse: id of the spouse record. Omit it to show a Spouse placeholder.
 	- spouse: id of the spouse record. Omit it to show a Spouse placeholder.
 	- siblings: optional sibling ids when shared parents are not recorded.
 	- parents: optional parent ids when the parent branch is not part of the main tree.
