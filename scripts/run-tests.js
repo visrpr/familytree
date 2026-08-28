@@ -20,13 +20,12 @@ function section(name) { console.log('\n' + name); }
   const worker = await import('file://' + tmp.replace(/\\/g, '/'));
   fs.unlinkSync(tmp);
 
-  section('isAuthorized (fail closed)');
-  const adminReq = { headers: { get: (h) => (h === 'Authorization' ? 'Bearer sekret' : null) } };
-  const noAuthReq = { headers: { get: () => null } };
-  assert(worker.isAuthorized(adminReq, { ADMIN_TOKEN: 'sekret' }) === true, 'valid token authorizes');
-  assert(worker.isAuthorized(noAuthReq, { ADMIN_TOKEN: 'sekret' }) === false, 'missing token rejected');
-  assert(worker.isAuthorized(adminReq, { ADMIN_TOKEN: 'sekret2' }) === false, 'wrong token rejected');
-  assert(worker.isAuthorized(adminReq, {}) === false, 'missing ADMIN_TOKEN fails closed');
+  section('validYear');
+  assert(worker.validYear('') === true, 'empty year allowed');
+  assert(worker.validYear('1900') === true, 'four-digit year allowed');
+  assert(worker.validYear('12') === true, 'short year allowed');
+  assert(worker.validYear('19ab') === false, 'non-numeric rejected');
+  assert(worker.validYear('19000') === false, 'over four digits rejected');
 
   section('safeContentType');
   assert(worker.safeContentType('image/jpeg') === 'image/jpeg', 'jpeg allowed');

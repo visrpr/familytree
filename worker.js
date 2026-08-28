@@ -33,11 +33,6 @@ function json(data, status, origin) {
   });
 }
 
-function isAuthorized(request, env) {
-  if (!env.ADMIN_TOKEN) return false;
-  return request.headers.get('Authorization') === `Bearer ${env.ADMIN_TOKEN}`;
-}
-
 function clientKeyFrom(request) {
   const forwarded = request.headers.get('CF-Connecting-IP');
   if (forwarded) return forwarded;
@@ -102,6 +97,18 @@ function parseJson(value, fallback) {
   try { return JSON.parse(value); } catch (error) { return fallback; }
 }
 
+function validYear(value) {
+  return value === '' || /^\d{1,4}$/.test(value);
+}
+
+async function logEdit(env, personId, action, details, clientIp) {
+  if (!env.DB) return;
+  await env.DB.prepare('INSERT INTO edit_log (person_id, action, details, client_ip) VALUES (?, ?, ?, ?)')
+    .bind(personId, action, JSON.stringify(details), clientIp)
+    .run()
+    .catch(() => {});
+}
+
 async function readPeople(env) {
   const [peopleResult, photosResult] = await Promise.all([
     env.DB.prepare('SELECT * FROM people ORDER BY rowid').all(),
@@ -163,7 +170,6 @@ export default {
     }
     if (!['/api/upload', '/api/update', '/api/reorder'].includes(url.pathname) || request.method !== 'POST') return json({ error: 'Not found' }, 404, responseOrigin);
     if (requestOrigin && requestOrigin !== allowedOrigin) return json({ error: 'Origin not allowed.' }, 403, responseOrigin);
-    if (!isAuthorized(request, env)) return json({ error: 'Admin authorization is required.' }, 401, responseOrigin);
     const clientKey = clientKeyFrom(request);
     if (rateLimited(clientKey, url.pathname === '/api/upload' ? 'upload' : 'default')) {
       return json({ error: 'Too many requests. Please slow down and try again.' }, 429, responseOrigin);
@@ -201,6 +207,7 @@ export default {
           await env.DB.prepare('INSERT INTO photos (person_id, url, object_key, sort_order) VALUES (?, ?, ?, ?)').bind(personId, imageUrl, objectKey, replaceCardPhoto ? 0 : stored.length).run();
         }
         const rows = await photoRows(env, personId);
+        await logEdit(env, personId, 'photo_upload', { url: imageUrl, objectKey, replaceCardPhoto }, clientKey);
         return json({ success: true, url: imageUrl, photos: rows.map(photo => photo.url), photoIds: rows.map(photo => photo.id) }, 200, responseOrigin);
       } else {
         if (!env.DB) return json({ error: 'Family database is not configured.' }, 503, responseOrigin);
@@ -214,17 +221,23 @@ export default {
           ? { photos: Array.isArray(body.photos) ? body.photos.filter(photo => typeof photo === 'string' && photo).slice(0, 6) : [] }
           : { name: String(body.name || '').trim(), birth: String(body.birth || '').trim(), death: String(body.death || '').trim() };
         if (url.pathname === '/api/reorder' && !requestedPhotoIds.length) return json({ error: 'Photo IDs are required.' }, 400, responseOrigin);
-        if (url.pathname === '/api/update' && !fields.name) return json({ error: 'A name is required.' }, 400, responseOrigin);
+        if (url.pathname === '/api/update') {
+          if (!fields.name) return json({ error: 'A name is required.' }, 400, responseOrigin);
+          if (fields.name.length > 200) return json({ error: 'Name must be 200 characters or fewer.' }, 400, responseOrigin);
+          if (!validYear(fields.birth) || !validYear(fields.death)) return json({ error: 'Birth and death years must be empty or a four-digit year.' }, 400, responseOrigin);
+        }
       }
       if (!/^[a-z0-9-]+$/.test(personId)) return json({ error: 'A valid family member is required.' }, 400, responseOrigin);
 
       if (url.pathname === '/api/reorder' && env.DB) {
         const rows = await reorderPhotoRows(env, personId, requestedPhotoIds);
+        await logEdit(env, personId, 'photo_reorder', { photoIds: requestedPhotoIds }, clientKey);
         return json({ success: true, photos: rows.map(photo => photo.url), photoIds: rows.map(photo => photo.id) }, 200, responseOrigin);
       }
 
       const result = await env.DB.prepare('UPDATE people SET name = ?, birth = ?, death = ? WHERE id = ?').bind(fields.name, fields.birth, fields.death, personId).run();
       if (!result.meta.changes) return json({ error: 'The requested family member was not found.' }, 404, responseOrigin);
+      await logEdit(env, personId, 'update', { name: fields.name, birth: fields.birth, death: fields.death }, clientKey);
       return json({ success: true }, 200, responseOrigin);
     } catch (error) {
       console.error(JSON.stringify({ path: url.pathname, message: `${url.pathname} failed`, error: error instanceof Error ? error.message : String(error) }));
@@ -233,4 +246,4 @@ export default {
   }
 };
 
-export { isAuthorized, safeContentType, reorderIdsValid, rateLimited };
+export { validYear, safeContentType, reorderIdsValid, rateLimited };

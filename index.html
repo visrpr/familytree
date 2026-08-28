@@ -230,14 +230,7 @@
   renderSoundToggle();
 
   function adminHeaders(headers){
-    var result = headers || {};
-    var token = sessionStorage.getItem('familyTreeAdminToken');
-    if(!token){
-      token = window.prompt('Enter the family tree admin token:');
-      if(token) sessionStorage.setItem('familyTreeAdminToken', token);
-    }
-    if(token) result.Authorization = 'Bearer ' + token;
-    return result;
+    return headers || {};
   }
 
   if(!byId[ROOT_ID]){

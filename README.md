@@ -16,7 +16,9 @@ Welcome to the repository for our family history website! This project is a digi
 
 Family members and photo metadata are stored in the Cloudflare D1 database `family-tree`. Image files are stored in the Cloudflare R2 bucket `family-tree-photos`. New photos and profile changes are managed through the family tree editor.
 
-The Cloudflare resources, schema, and family-data import are already set up. Binding IDs are recorded in `wrangler.jsonc`, and the private admin token is stored in Cloudflare rather than Git.
+Editing is intentionally open: anyone can update a profile's name and years or upload, replace, and arrange photos from the editor. Every successful change is written to the D1 `edit_log` table (person, action, details, timestamp, and visitor IP) so edits can be reviewed or reverted manually. Per-IP rate limiting (applied in the Worker) discourages abuse but is best-effort; it is not real authentication. If you want to lock editing down again, the `ADMIN_TOKEN` bearer check can be restored in `worker.js`.
+
+The Cloudflare resources, schema, and family-data import are already set up. Binding IDs are recorded in `wrangler.jsonc`.
 
 For a future schema change or Worker deployment, run these commands from this folder:
 
@@ -35,4 +37,4 @@ Seed options (run from this folder):
 
 Run the Worker/seed unit tests with `node scripts/run-tests.js`.
 
-The admin token is requested the first time you upload, edit, or arrange a photo. It is kept only in that browser session. Do not commit or share the token. Updates to `index.html` are published through the GitHub Pages deployment.
+Updates to `index.html` are published through the GitHub Pages deployment. After this change, run `npx wrangler d1 migrations apply family-tree --remote` once to create the `edit_log` table, then `npx wrangler deploy --config D:\FamilyTree\familytree\wrangler.jsonc`.

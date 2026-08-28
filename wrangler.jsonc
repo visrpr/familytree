@@ -22,10 +22,5 @@
 			"binding": "PHOTOS",
 			"bucket_name": "family-tree-photos"
 		}
-	],
-	"secrets": {
-		"required": [
-			"ADMIN_TOKEN"
-		]
-	}
+	]
 }
