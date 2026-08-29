@@ -529,7 +529,8 @@
       var hasSpouse = !!partnerFor(p);
       var spouse = partnerFor(p);
       var selfW = hasSpouse ? (CARD_W*2 + SPOUSE_GAP) : CARD_W;
-      selfW += siblingGroupWidth(hasSpouse ? spouse : p);
+      var sibBranchW = siblingGroupWidth(hasSpouse ? spouse : p);
+      selfW += sibBranchW ? sibBranchW*2 : 0;
       var kids = (p.children||[]).filter(function(cid){ return byId[cid]; });
       var w;
       if(collapsed.has(id) || !kids.length){
