@@ -109,6 +109,89 @@ async function logEdit(env, personId, action, details, clientIp) {
     .catch(() => {});
 }
 
+function slugFor(name) {
+  const base = String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  return base || 'member';
+}
+
+function uniqueId(existingIds, name) {
+  const base = slugFor(name);
+  let candidate = base;
+  let counter = 2;
+  while (existingIds.has(candidate)) {
+    candidate = `${base}-${counter}`;
+    counter += 1;
+  }
+  return candidate;
+}
+
+const CREATE_KINDS = new Set(['spouse', 'child', 'sibling']);
+const GENDERS = new Set(['male', 'female', 'unknown']);
+
+function parseCreateBody(body) {
+  const kind = String(body.kind || '');
+  if (!CREATE_KINDS.has(kind)) return { error: 'A valid kind (spouse, child, or sibling) is required.' };
+  const personId = String(body.personId || '');
+  if (!/^[a-z0-9-]+$/.test(personId)) return { error: 'A valid family member is required.' };
+  const name = String(body.name || '').trim();
+  if (!name) return { error: 'A name is required.' };
+  if (name.length > 200) return { error: 'Name must be 200 characters or fewer.' };
+  const gender = GENDERS.has(String(body.gender)) ? String(body.gender) : 'unknown';
+  const birth = String(body.birth || '').trim();
+  const death = String(body.death || '').trim();
+  if (!validYear(birth) || !validYear(death)) return { error: 'Birth and death years must be empty or a four-digit year.' };
+  if (kind === 'sibling') {
+    const parentId = String(body.parentId || '');
+    if (!/^[a-z0-9-]+$/.test(parentId)) return { error: 'A valid parent is required to add a sibling.' };
+    return { value: { kind, personId, parentId, name, gender, birth, death } };
+  }
+  return { value: { kind, personId, name, gender, birth, death } };
+}
+
+async function existingPeopleIds(env) {
+  const result = await env.DB.prepare('SELECT id FROM people').all();
+  return new Set((result.results || []).map(row => row.id));
+}
+
+function insertNewPerson(env, newId, payload, spouseId) {
+  return env.DB.prepare('INSERT INTO people (id, name, gender, birth, death, children_json, parents_json, siblings_json, spouse_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(newId, payload.name, payload.gender, payload.birth, payload.death, '[]', '[]', '[]', spouseId || null);
+}
+
+async function createPerson(env, payload) {
+  const existingIds = await existingPeopleIds(env);
+  const newId = uniqueId(existingIds, payload.name);
+
+  if (payload.kind === 'spouse') {
+    const anchor = await env.DB.prepare('SELECT id, spouse_id FROM people WHERE id = ?').bind(payload.personId).first();
+    if (!anchor) throw new Error('The requested family member was not found.');
+    if (anchor.spouse_id) throw new Error('This family member already has a spouse.');
+    await env.DB.batch([
+      insertNewPerson(env, newId, payload, payload.personId),
+      env.DB.prepare('UPDATE people SET spouse_id = ? WHERE id = ?').bind(newId, payload.personId)
+    ]);
+  } else {
+    const ownerId = payload.kind === 'child' ? payload.personId : payload.parentId;
+    const owner = await env.DB.prepare('SELECT id, spouse_id, children_json FROM people WHERE id = ?').bind(ownerId).first();
+    if (!owner) throw new Error('The requested family member was not found.');
+    if (payload.kind === 'child') {
+      const hasHousehold = !!(owner.spouse_id || parseJson(owner.children_json, []).length);
+      if (!hasHousehold) throw new Error('Children are added to a married couple. Add a spouse first.');
+    } else if (parseJson(owner.children_json, []).indexOf(payload.personId) === -1) {
+      throw new Error('The requested family member is not a child of that parent.');
+    }
+    await env.DB.batch([
+      insertNewPerson(env, newId, payload, null),
+      env.DB.prepare("UPDATE people SET children_json = json_insert(children_json, '$[#]', ?) WHERE id = ?").bind(newId, ownerId)
+    ]);
+  }
+
+  const people = await readPeople(env);
+  const person = people.find(entry => entry.id === newId) || null;
+  if (!person) throw new Error('The family member could not be created. Try again.');
+  return { person, people };
+}
+
 async function readPeople(env) {
   const [peopleResult, photosResult] = await Promise.all([
     env.DB.prepare('SELECT * FROM people ORDER BY rowid').all(),
@@ -168,7 +251,7 @@ export default {
         }
       });
     }
-    if (!['/api/upload', '/api/update', '/api/reorder'].includes(url.pathname) || request.method !== 'POST') return json({ error: 'Not found' }, 404, responseOrigin);
+    if (!['/api/upload', '/api/update', '/api/reorder', '/api/person'].includes(url.pathname) || request.method !== 'POST') return json({ error: 'Not found' }, 404, responseOrigin);
     if (requestOrigin && requestOrigin !== allowedOrigin) return json({ error: 'Origin not allowed.' }, 403, responseOrigin);
     const clientKey = clientKeyFrom(request);
     if (rateLimited(clientKey, url.pathname === '/api/upload' ? 'upload' : 'default')) {
@@ -178,6 +261,18 @@ export default {
       let personId;
       let fields;
       let requestedPhotoIds = [];
+      if (url.pathname === '/api/person') {
+        if (!env.DB) return json({ error: 'Family database is not configured.' }, 503, responseOrigin);
+        if (!request.headers.get('Content-Type')?.toLowerCase().includes('application/json')) {
+          return json({ error: 'Create must use JSON.' }, 415, responseOrigin);
+        }
+        const body = await request.json();
+        const parsed = parseCreateBody(body);
+        if (parsed.error) return json({ error: parsed.error }, 400, responseOrigin);
+        const created = await createPerson(env, parsed.value);
+        await logEdit(env, parsed.value.personId, 'create', { kind: parsed.value.kind, name: created.person.name, newId: created.person.id }, clientKey);
+        return json({ success: true, person: created.person, people: created.people }, 200, responseOrigin);
+      }
       if (url.pathname === '/api/upload') {
         if (!env.DB || !env.PHOTOS) return json({ error: 'Photo storage is not configured.' }, 503, responseOrigin);
         if (!request.headers.get('Content-Type')?.toLowerCase().includes('multipart/form-data')) {
@@ -246,4 +341,4 @@ export default {
   }
 };
 
-export { validYear, safeContentType, reorderIdsValid, rateLimited };
+export { validYear, safeContentType, reorderIdsValid, rateLimited, slugFor, uniqueId, parseCreateBody };

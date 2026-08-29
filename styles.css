@@ -127,6 +127,10 @@ header{padding:14px 26px 13px;border-bottom:1px solid var(--brass-line);backgrou
 .person.placeholder{border-style:dashed;border-color:var(--unknown-text)}
 .person.placeholder .name{font-style:italic;color:var(--unknown-text)}
 .person.root{border-color:var(--brass);border-width:1.5px}
+.card-add{position:absolute;top:-9px;right:-9px;width:26px;height:26px;border:1px solid rgba(255,250,240,.85);border-radius:50%;background:var(--brass-deep);color:#fffaf0;font:700 15px/1 'Inter',-apple-system,'Segoe UI',sans-serif;cursor:pointer;box-shadow:var(--shadow-card);opacity:0;transform:scale(.65);transition:opacity var(--dur) var(--ease),transform var(--dur) var(--ease),background var(--dur);z-index:6}
+.person:hover .card-add,.person:focus-within .card-add{opacity:1;transform:scale(1)}
+.card-add:hover,.card-add:focus-visible{background:var(--maroon)}
+@media (hover:none){.card-add{opacity:.92;transform:scale(1)}}
 
 .relation-label{position:absolute;z-index:2;transform:translateX(-50%);height:18px;line-height:18px;font:600 8.5px/18px 'Inter',-apple-system,'Segoe UI',sans-serif;text-transform:uppercase;letter-spacing:.15em;color:#fff;background:rgba(0,0,0,.5);padding:0 8px;border-radius:var(--r-xs);white-space:nowrap}
 .relation-label.endpoint-label{height:16px;line-height:16px;font-size:8px;letter-spacing:.1em;color:#fff;background:rgba(0,0,0,.5);border:0;padding:0 6px;border-radius:5px;box-shadow:0 2px 5px rgba(50,38,14,.08)}
@@ -305,6 +309,31 @@ header{padding:14px 26px 13px;border-bottom:1px solid var(--brass-line);backgrou
 .relation-link{border:1px solid var(--brass-line);border-radius:var(--r-sm);background:var(--card);padding:7px 10px;color:var(--ink-soft);cursor:pointer;font:500 12px 'Inter',-apple-system,'Segoe UI',sans-serif}
 .relation-link:hover{border-color:var(--brass);color:var(--brass-deep)}
 .relation-link.placeholder-link{border-style:dashed;color:var(--unknown-text)}
+
+/* ============ Add family member popover ============ */
+.add-popover{display:none;position:fixed;z-index:1200;width:240px;background:var(--paper-grad);border:1px solid var(--brass-line);border-radius:var(--r-md);box-shadow:var(--shadow-float);padding:12px;color:var(--ink)}
+.add-popover.open{display:block}
+.add-popover-header{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
+.add-popover-title{font:700 12px 'Aleo',Georgia,serif;color:var(--maroon);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.add-popover-close{border:none;background:none;font-size:18px;line-height:1;cursor:pointer;color:var(--ink-soft);padding:2px 4px;flex-shrink:0}
+.add-popover-close:hover{color:var(--maroon)}
+.add-menu{display:flex;flex-direction:column;gap:6px}
+.add-menu-item{border:1px solid var(--brass-line);border-radius:var(--r-sm);background:var(--card);padding:9px 10px;cursor:pointer;color:var(--ink-soft);font:600 12px 'Inter',-apple-system,'Segoe UI',sans-serif;text-align:left}
+.add-menu-item:hover{border-color:var(--brass);background:var(--brass-deep);color:#fffaf0}
+.add-menu-empty{padding:4px 2px;color:var(--muted);font-size:12px}
+.add-form{display:flex;flex-direction:column;gap:8px}
+.add-popover .hidden{display:none}
+.add-form label{display:flex;flex-direction:column;gap:3px;color:var(--ink-soft);font:600 11px 'Inter',-apple-system,'Segoe UI',sans-serif}
+.add-form input,.add-form select{width:100%;border:1px solid var(--border);border-radius:var(--r-sm);background:#fffdf8;padding:7px 8px;color:var(--ink);font:13px 'Inter',-apple-system,'Segoe UI',sans-serif}
+.add-form input:focus,.add-form select:focus{outline:none;border-color:var(--brass);box-shadow:0 0 0 3px rgba(156,122,58,.13)}
+.add-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.add-status{min-height:16px;margin:0;color:var(--maroon);font-size:11px;line-height:1.4}
+.add-status.error{color:#b3261e}
+.add-actions{display:flex;justify-content:flex-end;gap:8px}
+.add-actions button{border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 11px;cursor:pointer;font:600 11px 'Inter',-apple-system,'Segoe UI',sans-serif}
+.add-actions .add-cancel{background:var(--bg);color:var(--ink-soft)}
+.add-actions .add-create{border-color:var(--brass);background:var(--brass-deep);color:#fffaf0}
+.add-actions .add-create[disabled]{cursor:wait;opacity:.65}
 
 /* ============ Responsive ============ */
 @media(max-width:760px){

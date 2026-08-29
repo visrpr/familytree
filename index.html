@@ -258,6 +258,19 @@
     }
   });
 
+  nodesLayer.addEventListener('click', function(e){
+    var addButton = e.target.closest('.card-add');
+    if(!addButton) return;
+    if(e.target.closest('.person')) e.stopPropagation();
+    var person = byId[addButton.dataset.person];
+    if(person) openAddPopover(person, null, e.target.closest('.person'));
+  });
+  document.addEventListener('click', function(e){
+    if(e.target.closest('.add-popover') || e.target.closest('.card-add')) return;
+    closeAddPopover();
+  });
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeAddPopover(); });
+
   legendToggle.addEventListener('click', function(e){
     e.stopPropagation();
     var isOpen = legend.classList.toggle('open');
@@ -281,6 +294,7 @@
   }
   function showView(viewName){
     var isTree = viewName === 'tree';
+    closeAddPopover();
     document.getElementById('viewport').style.display = isTree ? '' : 'none';
     timelineView.classList.toggle('open', viewName === 'timeline');
     factsView.classList.toggle('open', viewName === 'facts');
@@ -584,9 +598,31 @@
       siblingsGroup.appendChild(siblingsLinks);
       detailsRelations.appendChild(siblingsGroup);
     }
+    var addActions = [];
+    if(canAddSpouse(p)) addActions.push(['spouse','Spouse']);
+    if(canAddChild(p)) addActions.push(['child','Child']);
+    if(canAddSibling(p)) addActions.push(['sibling','Sibling']);
+    if(addActions.length){
+      var addGroup = document.createElement('div');
+      addGroup.className = 'relation-group';
+      addGroup.innerHTML = '<div class="relation-group-title">Add</div>';
+      var addLinks = document.createElement('div');
+      addLinks.className = 'relation-links';
+      addActions.forEach(function(action){
+        var chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'relation-link';
+        chip.textContent = 'Add ' + action[1];
+        chip.addEventListener('click', function(){ openAddPopover(p, action[0], chip); });
+        addLinks.appendChild(chip);
+      });
+      addGroup.appendChild(addLinks);
+      detailsRelations.appendChild(addGroup);
+    }
   }
 
   function openDetails(p){
+    closeAddPopover();
     editingPerson = p;
     detailsEditor.classList.remove('open');
     var photos = Array.isArray(p.photos) ? p.photos : [];
@@ -756,13 +792,14 @@
     el.setAttribute('role','button');
     var yl = yearsLabel(p);
     el.innerHTML =
+      (p.placeholder ? '' : '<button type="button" class="card-add" data-person="'+p.id+'" aria-label="Add family member" title="Add family member">+</button>') +
       makeAvatar(p, structDepth[p.id]) +
       '<div class="name">'+esc(p.name)+'</div>' +
       (p.maidenName ? '<div class="maiden-name">('+esc(p.maidenName)+')</div>' : '') +
       (yl ? '<div class="years">'+esc(yl)+'</div>' : '') +
       (opts.isRoot ? '<div class="badge founder">Family Founder</div>' : '');
-    el.addEventListener('click', function(e){ e.stopPropagation(); playPageTurnSound(); openDetails(p); });
-    el.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); playPageTurnSound(); openDetails(p); } });
+    el.addEventListener('click', function(e){ e.stopPropagation(); if(e.target.closest('.card-add')) return; playPageTurnSound(); openDetails(p); });
+    el.addEventListener('keydown', function(e){ if(e.target !== el) return; if(e.key==='Enter'||e.key===' '){ e.preventDefault(); playPageTurnSound(); openDetails(p); } });
     return el;
   }
 
@@ -776,6 +813,180 @@
     return label;
   }
 
+  function canAddSpouse(p){ return !p.placeholder && !p.spouse; }
+  function canAddChild(p){ return !p.placeholder && !!partnerFor(p); }
+  function canAddSibling(p){ return !p.placeholder && parentOf[p.id] !== undefined; }
+  function defaultGenderFor(kind, p){
+    if(kind === 'spouse'){ if(p.gender === 'male') return 'female'; if(p.gender === 'female') return 'male'; }
+    return 'unknown';
+  }
+  function childrenOwnerFor(p){
+    var spouse = partnerFor(p);
+    var ids = [p.id];
+    if(spouse) ids.push(spouse.id);
+    var holder = ids.filter(function(id){ return (byId[id].children||[]).length > 0; });
+    if(holder.length === 1) return holder[0];
+    var placed = ids.filter(function(id){ return structDepth[id] !== undefined; });
+    if(placed.length === 1) return placed[0];
+    return p.id;
+  }
+
+  var addPopoverEl = null;
+  var addAnchor = null;
+  var addAnchorEl = null;
+  var addKind = '';
+  var addSubmitting = false;
+  function ensureAddPopover(){
+    if(addPopoverEl) return addPopoverEl;
+    addPopoverEl = document.createElement('div');
+    addPopoverEl.className = 'add-popover';
+    addPopoverEl.setAttribute('role','dialog');
+    addPopoverEl.setAttribute('aria-label','Add family member');
+    addPopoverEl.innerHTML =
+      '<div class="add-popover-header"><span class="add-popover-title"></span><button type="button" class="add-popover-close" aria-label="Close">×</button></div>' +
+      '<div class="add-menu"></div>' +
+      '<form class="add-form hidden">' +
+        '<label>Name<input class="add-name" type="text" maxlength="200" required></label>' +
+        '<div class="add-grid">' +
+          '<label>Gender<select class="add-gender"><option value="female">Female</option><option value="male">Male</option><option value="unknown">Unknown</option></select></label>' +
+          '<label>Birth<input class="add-birth" type="text" inputmode="numeric" maxlength="4" placeholder="YYYY"></label>' +
+          '<label>Death<input class="add-death" type="text" inputmode="numeric" maxlength="4" placeholder="YYYY"></label>' +
+        '</div>' +
+        '<p class="add-status" role="status" aria-live="polite"></p>' +
+        '<div class="add-actions"><button type="button" class="add-cancel">Cancel</button><button type="submit" class="add-create">Add to family</button></div>' +
+      '</form>';
+    document.body.appendChild(addPopoverEl);
+    addPopoverEl.querySelector('.add-popover-close').addEventListener('click', closeAddPopover);
+    addPopoverEl.querySelector('.add-cancel').addEventListener('click', closeAddPopover);
+    addPopoverEl.querySelector('.add-form').addEventListener('submit', function(e){ e.preventDefault(); submitAdd(); });
+    return addPopoverEl;
+  }
+  function closeAddPopover(){
+    if(addPopoverEl) addPopoverEl.classList.remove('open');
+    addAnchor = null;
+    addAnchorEl = null;
+    addKind = '';
+  }
+  function positionAddPopover(anchorEl){
+    var el = ensureAddPopover();
+    el.classList.remove('open');
+    var anchorRect = (anchorEl && anchorEl.getBoundingClientRect()) || {left:window.innerWidth/2, top:window.innerHeight/2, right:window.innerWidth/2, bottom:window.innerHeight/2};
+    var popupW = el.offsetWidth || 240;
+    var left = anchorRect.right + 8;
+    if(left + popupW > window.innerWidth - 8) left = Math.max(8, anchorRect.left - popupW - 8);
+    var top = Math.max(8, anchorRect.top);
+    if(top + 330 > window.innerHeight - 8) top = Math.max(8, window.innerHeight - 338);
+    el.style.left = left + 'px';
+    el.style.top = top + 'px';
+    el.classList.add('open');
+  }
+  function showAddForm(kind, person){
+    var el = ensureAddPopover();
+    addAnchor = person;
+    addKind = kind;
+    el.querySelector('.add-menu').classList.add('hidden');
+    var form = el.querySelector('.add-form');
+    form.classList.remove('hidden');
+    el.querySelector('.add-name').value = '';
+    el.querySelector('.add-birth').value = '';
+    el.querySelector('.add-death').value = '';
+    el.querySelector('.add-gender').value = defaultGenderFor(kind, person);
+    var status = el.querySelector('.add-status');
+    status.className = 'add-status';
+    status.textContent = '';
+    el.querySelector('.add-create').textContent = kind === 'spouse' ? 'Add spouse' : kind === 'child' ? 'Add child' : 'Add sibling';
+    positionAddPopover(addAnchorEl);
+    el.querySelector('.add-name').focus();
+  }
+  function openAddPopover(person, forcedKind, anchorEl){
+    if(!person || person.placeholder) return;
+    var el = ensureAddPopover();
+    addAnchorEl = anchorEl || cardEls[person.id] || null;
+    el.querySelector('.add-popover-title').textContent = 'Add: ' + person.name;
+    el.querySelector('.add-status').className = 'add-status';
+    var menu = el.querySelector('.add-menu');
+    var form = el.querySelector('.add-form');
+    menu.classList.remove('hidden');
+    form.classList.add('hidden');
+    menu.innerHTML = '';
+    var actions = [];
+    if(canAddSpouse(person)) actions.push(['spouse','spouse']);
+    if(canAddChild(person)) actions.push(['child','child']);
+    if(canAddSibling(person)) actions.push(['sibling','sibling']);
+    if(forcedKind){
+      if(!actions.some(function(a){ return a[0] === forcedKind; })) return;
+      showAddForm(forcedKind, person);
+      return;
+    }
+    actions.forEach(function(action){
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'add-menu-item';
+      button.textContent = 'Add ' + action[1];
+      button.addEventListener('click', function(){ showAddForm(action[0], person); });
+      menu.appendChild(button);
+    });
+    if(!actions.length) menu.innerHTML = '<div class="add-menu-empty">Nothing more to add here yet.</div>';
+    positionAddPopover(addAnchorEl);
+  }
+  function acceptPeople(people){
+    RAW = people;
+    byId = Object.fromEntries(people.map(function(p){ return [p.id, p]; }));
+    parentOf = {};
+    people.forEach(function(p){ (p.children||[]).forEach(function(cid){ parentOf[cid] = p.id; }); });
+    people.forEach(function(p){ (p.parents||[]).forEach(function(pid){ if(byId[pid] && parentOf[p.id] === undefined) parentOf[p.id] = pid; }); });
+    structDepth = {};
+    (function calcDepth(id, d){
+      if(!byId[id] || structDepth[id] !== undefined) return;
+      structDepth[id] = d;
+      (byId[id].children||[]).forEach(function(cid){ calcDepth(cid, d+1); });
+    })(ROOT_ID, 0);
+  }
+  function submitAdd(){
+    if(!addAnchor || addSubmitting) return;
+    var el = ensureAddPopover();
+    var status = el.querySelector('.add-status');
+    var createButton = el.querySelector('.add-create');
+    var name = el.querySelector('.add-name').value.trim();
+    if(!name){ status.className = 'add-status error'; status.textContent = 'A name is required.'; return; }
+    var birth = el.querySelector('.add-birth').value.trim();
+    var death = el.querySelector('.add-death').value.trim();
+    if(birth && !/^\d{1,4}$/.test(birth)){ status.className = 'add-status error'; status.textContent = 'Birth must be empty or a four-digit year.'; return; }
+    if(death && !/^\d{1,4}$/.test(death)){ status.className = 'add-status error'; status.textContent = 'Death must be empty or a four-digit year.'; return; }
+    var payload = {
+      action:'create',
+      kind:addKind,
+      personId:addAnchor.id,
+      name:name,
+      gender:el.querySelector('.add-gender').value,
+      birth:birth,
+      death:death
+    };
+    if(addKind === 'child') payload.personId = childrenOwnerFor(addAnchor);
+    if(addKind === 'sibling') payload.parentId = parentOf[addAnchor.id];
+    addSubmitting = true;
+    createButton.disabled = true;
+    status.className = 'add-status';
+    status.textContent = 'Adding to the family tree...';
+    fetch(IMAGE_UPLOAD_ENDPOINT.replace(/\/api\/upload$/, '/api/person'), {method:'POST', body:JSON.stringify(payload), headers:adminHeaders({'Content-Type':'application/json',Accept:'application/json'})})
+      .then(function(response){ return response.json().then(function(result){ if(!response.ok) throw new Error(result.error || 'Could not add the family member.'); return result; }); })
+      .then(function(result){
+        addSubmitting = false;
+        closeAddPopover();
+        acceptPeople(result.people || []);
+        render();
+        updateStatsAndLegend();
+        var created = result.person && byId[result.person.id];
+        openDetails(created || byId[payload.personId] || addAnchor);
+      })
+      .catch(function(error){
+        addSubmitting = false;
+        createButton.disabled = false;
+        status.className = 'add-status error';
+        status.textContent = error.message || 'Could not add the family member.';
+      });
+  }
+
   var renderQueued = false;
   function scheduleRender(){
     if(renderQueued) return;
@@ -787,6 +998,7 @@
   }
 
   function render(){
+    closeAddPopover();
     var layout = computeLayout();
     var positions = layout.positions, maxY = layout.maxY, totalWidth = layout.totalWidth;
     var totalW = totalWidth + PAD*2;

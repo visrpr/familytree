@@ -49,6 +49,31 @@ function section(name) { console.log('\n' + name); }
   for (let i = 0; i < 100; i++) worker.rateLimited(key + '-flood', 'default');
   assert(worker.rateLimited(key + '-flood', 'default') === true, 'over limit blocked');
 
+  section('slugFor');
+  assert(worker.slugFor('Savitri') === 'savitri', 'simple name slugged');
+  assert(worker.slugFor('Ram P. Pai') === 'ram-p-pai', 'punctuation slugged');
+  assert(worker.slugFor('Sri Lakshmi Devi  V') === 'sri-lakshmi-devi-v', 'spaces collapsed');
+  assert(worker.slugFor('   ') === 'member', 'empty falls back to member');
+  assert(worker.slugFor('X'.repeat(80)).length <= 40, 'long names capped at 40 chars');
+
+  section('uniqueId');
+  assert(worker.uniqueId(new Set(['savitri']), 'Savitri') === 'savitri-2', 'collision increments suffix');
+  assert(worker.uniqueId(new Set(['savitri', 'savitri-2']), 'Savitri') === 'savitri-3', 'chained collision increments');
+  assert(worker.uniqueId(new Set([]), 'Madhu') === 'madhu', 'unused slug returned as-is');
+
+  section('parseCreateBody');
+  const spouse = worker.parseCreateBody({kind:'spouse', personId:'ram', name:'Sita', gender:'female', birth:'1910'});
+  assert(!spouse.error && spouse.value.kind === 'spouse' && spouse.value.name === 'Sita', 'valid spouse accepted');
+  const child = worker.parseCreateBody({kind:'child', personId:'srinivas', name:'Vijay'});
+  assert(!child.error && child.value.gender === 'unknown' && child.value.birth === '', 'child defaults applied');
+  assert(!!worker.parseCreateBody({kind:'cousin', personId:'ram', name:'Sita'}).error, 'unknown kind rejected');
+  assert(!!worker.parseCreateBody({kind:'spouse', personId:'ram', name:'   '}).error, 'blank name rejected');
+  assert(!!worker.parseCreateBody({kind:'spouse', personId:'ram', name:'Sita', birth:'19ab'}).error, 'bad year rejected');
+  assert(!!worker.parseCreateBody({kind:'spouse', personId:'RAM!', name:'Sita'}).error, 'bad person id rejected');
+  assert(!!worker.parseCreateBody({kind:'sibling', personId:'bhumika', name:'Kiran'}).error, 'sibling without parent rejected');
+  const sibling = worker.parseCreateBody({kind:'sibling', personId:'bhumika', parentId:'srinivas', name:'Kiran'});
+  assert(!sibling.error && sibling.value.parentId === 'srinivas', 'sibling with parent accepted');
+
   section('family-data integrity');
   const source = fs.readFileSync(path.join(root, 'family-data.js'), 'utf8');
   const context = { window: {} };
