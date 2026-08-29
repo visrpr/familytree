@@ -74,6 +74,14 @@ function section(name) { console.log('\n' + name); }
   const sibling = worker.parseCreateBody({kind:'sibling', personId:'bhumika', parentId:'srinivas', name:'Kiran'});
   assert(!sibling.error && sibling.value.parentId === 'srinivas', 'sibling with parent accepted');
 
+  const parentPair = worker.parseCreateBody({kind:'parent', personId:'padmanabh', mother:{name:'Yashoda Bai', birth:'1880'}, father:{name:'Narayan Rao'}});
+  assert(!parentPair.error && parentPair.value.kind === 'parent' && parentPair.value.mother.name === 'Yashoda Bai' && parentPair.value.father.name === 'Narayan Rao', 'parent pair accepted');
+  const parentSingle = worker.parseCreateBody({kind:'parent', personId:'padmanabh', mother:'Yashoda Bai'});
+  assert(!parentSingle.error && parentSingle.value.mother.name === 'Yashoda Bai' && !parentSingle.value.father, 'single mother string accepted');
+  assert(!!worker.parseCreateBody({kind:'parent', personId:'padmanabh'}).error, 'parent without any name rejected');
+  assert(!!worker.parseCreateBody({kind:'parent', personId:'padmanabh', mother:{name:'X'}, father:{name:'X'}}).error, 'same mother/father name rejected');
+  assert(!!worker.parseCreateBody({kind:'parent', personId:'padmanabh', mother:{name:'X', birth:'18ab'}}).error, 'parent bad year rejected');
+
   section('family-data integrity');
   const source = fs.readFileSync(path.join(root, 'family-data.js'), 'utf8');
   const context = { window: {} };

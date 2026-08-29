@@ -7,7 +7,8 @@
 		"enabled": true
 	},
 	"vars": {
-		"ALLOWED_ORIGIN": "https://visrpr.github.io"
+		"ALLOWED_ORIGIN": "https://visrpr.github.io",
+		"ADMIN_CODE": "kashyap"
 	},
 	"d1_databases": [
 		{
