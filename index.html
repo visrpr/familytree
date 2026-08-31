@@ -762,7 +762,10 @@
         chip.type = 'button';
         chip.className = 'relation-link';
         chip.textContent = 'Add ' + action[1];
-        chip.addEventListener('click', function(){ openAddPopover(p, action[0], chip); });
+        chip.addEventListener('click', function(e){
+          e.stopPropagation();
+          openAddPopover(p, action[0], chip);
+        });
         addLinks.appendChild(chip);
       });
       addGroup.appendChild(addLinks);
