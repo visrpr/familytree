@@ -18,7 +18,7 @@
 <header>
   <div class="header-top">
     <div class="title-block">
-      <button class="legend-toggle" id="legendToggle" type="button" aria-label="Open menu" aria-expanded="false">☰</button>
+      <button class="legend-toggle" id="legendToggle" type="button" aria-label="Open menu" aria-expanded="false"><span class="legend-toggle-icon">☰</span><span class="legend-toggle-label">Menu</span></button>
       <div class="title-copy">
         <div class="kicker">Prabhu Family Tree</div>
         <div class="subtitle"><span id="stats"></span></div>
@@ -26,25 +26,20 @@
     </div>
     <div class="header-actions">
       <div class="search-wrap">
-        <input id="searchInput" type="text" placeholder="Search family members…" autocomplete="off" aria-label="Search family members">
-        <div id="searchResults" class="search-results"></div>
+        <input id="searchInput" type="text" placeholder="Search family members…" autocomplete="off" aria-label="Search family members" role="combobox" aria-expanded="false" aria-controls="searchResults">
+        <div id="searchResults" class="search-results" role="listbox"></div>
       </div>
       <div class="controls">
         <button id="out" type="button" aria-label="Zoom out">−</button>
         <input id="zoomSlider" class="zoom-slider" type="range" min="0.1" max="1.6" step="0.01" value="1" aria-label="Zoom level">
         <button id="in" type="button" aria-label="Zoom in">+</button>
+        <span class="sep"></span>
+        <button id="fitScreen" type="button" aria-label="Fit tree to screen" title="Fit tree to screen">⤢</button>
       </div>
-      <button id="soundToggle" class="legend-toggle" type="button" aria-pressed="false" title="Toggle page-turn sound">🔊</button>
       <button class="submit-open" id="submitOpen" type="button">Submit family info</button>
     </div>
   </div>
 </header>
-<div class="filter-control">
-  <button class="filter-button" id="filterButton" type="button" aria-label="Open filters" aria-expanded="false">&#9776;</button>
-  <div class="filter-panel" id="filterPanel">
-    <label class="filter-option"><input id="labelsToggle" type="checkbox"> Show relationship labels</label>
-  </div>
-</div>
 <div class="legend-backdrop" id="legendBackdrop"></div>
 <main class="viewport" id="viewport">
   <div class="canvas" id="canvas">
@@ -61,6 +56,11 @@
     <button class="menu-option" data-view="relationship" type="button">Relationship Check</button>
     <button class="menu-option" data-view="activity" type="button">Recent Additions</button>
   </nav>
+  <div class="menu-settings">
+    <div class="legend-title">Display</div>
+    <label class="filter-option menu-setting-row"><input id="labelsToggle" type="checkbox"> Show relationship labels</label>
+    <button class="menu-setting-row menu-setting-button" id="menuSoundToggle" type="button" aria-pressed="false">🔊 Page-turn sound</button>
+  </div>
   <div class="legend-content" id="legendContent"></div>
 </aside>
 <section class="timeline-view" id="timelineView" aria-hidden="true">
@@ -76,7 +76,7 @@
 <section class="relationship-view" id="relationshipView" aria-hidden="true">
   <div class="relationship-shell">
     <h1 class="view-heading">Relationship Check</h1>
-    <p class="view-subtitle">Choose two family members to compare their recorded relationship and details.</p>
+    <p class="view-subtitle">Find out how two family members are related. Pick a couple of names to compare them.</p>
     <div class="relationship-picker">
       <div class="relationship-field">
         <label for="relationshipPersonAInput">First person</label>
@@ -94,6 +94,7 @@
         </div>
       </div>
     </div>
+    <div class="relationship-chips" id="relationshipChips" aria-label="Quick picks"></div>
     <div class="relationship-result" id="relationshipResult"></div>
   </div>
 </section>
@@ -107,6 +108,21 @@
     </div>
     <p class="activity-status" id="activityStatus" role="status" aria-live="polite"></p>
     <div class="activity-list" id="activityList"></div>
+  </div>
+</section>
+<div class="toast-container" id="toastContainer" aria-live="polite"></div>
+<section class="help-view" id="helpView" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+  <div class="help-dialog">
+    <div class="help-top">
+      <h2 class="help-title" id="helpTitle">Welcome to the family tree</h2>
+    </div>
+    <p class="help-intro">A few quick tips to get you started.</p>
+    <div class="help-steps">
+      <div class="help-step"><div class="help-step-icon">🖐️</div><div class="help-step-body"><div class="help-step-title">Drag to move</div><div class="help-step-text">Click and drag anywhere on the tree to pan around.</div></div></div>
+      <div class="help-step"><div class="help-step-icon">🔍</div><div class="help-step-body"><div class="help-step-title">Zoom in and out</div><div class="help-step-text">Use the + / − buttons, the slider, or scroll with the Ctrl key. On touch screens, pinch to zoom.</div></div></div>
+      <div class="help-step"><div class="help-step-icon">👤</div><div class="help-step-body"><div class="help-step-title">Click a person</div><div class="help-step-text">Click any card to view details, photos, and family connections.</div></div></div>
+    </div>
+    <div class="help-actions"><button class="help-gotit" id="helpGotIt" type="button">Got it</button></div>
   </div>
 </section>
 <section class="details-view" id="detailsView" aria-hidden="true">
@@ -126,6 +142,10 @@
       </div>
       <p class="details-editor-status" id="detailsEditorStatus" role="status" aria-live="polite"></p>
       <div class="details-editor-actions"><button id="editCancel" type="button">Cancel</button><button class="details-editor-save" type="submit">Save changes</button></div>
+      <div class="details-confirm-bar" id="detailsConfirmBar" role="group" aria-label="Confirm changes">
+        <span>Save these changes?</span>
+        <div><button type="button" id="detailsConfirmYes">Confirm</button><button type="button" id="detailsConfirmNo">Not yet</button></div>
+      </div>
     </form>
     <div class="details-main">
       <div class="details-gallery" id="detailsGallery"></div>
@@ -172,6 +192,19 @@
         <button class="submit-send" id="submitSend" type="submit">Send for review</button>
       </div>
     </form>
+  </div>
+</section>
+<section class="photoconfirm-view" id="photoConfirmView" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="photoConfirmTitle">
+  <div class="photoconfirm-dialog">
+    <div class="photoconfirm-top">
+      <h2 class="photoconfirm-title" id="photoConfirmTitle">Add this photo?</h2>
+    </div>
+    <img id="photoConfirmPreview" class="photoconfirm-preview" alt="Photo preview">
+    <p class="photoconfirm-status" id="photoConfirmStatus" role="status" aria-live="polite"></p>
+    <div class="photoconfirm-actions">
+      <button class="photoconfirm-cancel" id="photoConfirmCancel" type="button">Cancel</button>
+      <button class="photoconfirm-ok" id="photoConfirmOk" type="button">Upload photo</button>
+    </div>
   </div>
 </section>
 
@@ -235,12 +268,13 @@
   var submitPicture = document.getElementById('submitPicture');
   var submitStatus = document.getElementById('submitStatus');
   var submitSend = document.getElementById('submitSend');
-  var filterButton = document.getElementById('filterButton');
-  var filterPanel = document.getElementById('filterPanel');
   var labelsToggle = document.getElementById('labelsToggle');
-  var soundToggle = document.getElementById('soundToggle');
-  nodesLayer.classList.add('labels-hidden');
-  function renderSoundToggle(){ soundToggle.textContent = soundMuted ? '🔇' : '🔊'; soundToggle.setAttribute('aria-pressed', String(soundMuted)); }
+  var soundToggle = document.getElementById('menuSoundToggle');
+  var LABELS_KEY = 'familyTreeShowLabels';
+  var labelsShown = localStorage.getItem(LABELS_KEY) === '1';
+  nodesLayer.classList.toggle('labels-hidden', !labelsShown);
+  labelsToggle.checked = labelsShown;
+  function renderSoundToggle(){ soundToggle.innerHTML = soundMuted ? '<span class="menu-setting-icon">🔇</span> Page-turn sound' : '<span class="menu-setting-icon">🔊</span> Page-turn sound'; soundToggle.setAttribute('aria-pressed', String(soundMuted)); }
   renderSoundToggle();
 
   var ADMIN_CODE_KEY = 'familytree-admin-code';
@@ -262,24 +296,14 @@
     return;
   }
 
-  filterButton.addEventListener('click', function(e){
-    e.stopPropagation();
-    var isOpen = filterPanel.classList.toggle('open');
-    filterButton.setAttribute('aria-expanded', String(isOpen));
-  });
   soundToggle.addEventListener('click', function(e){
     e.stopPropagation();
     toggleSound();
     renderSoundToggle();
   });
   labelsToggle.addEventListener('change', function(){
+    localStorage.setItem(LABELS_KEY, labelsToggle.checked ? '1' : '0');
     nodesLayer.classList.toggle('labels-hidden', !labelsToggle.checked);
-  });
-  document.addEventListener('click', function(e){
-    if(!e.target.closest('.filter-control')){
-      filterPanel.classList.remove('open');
-      filterButton.setAttribute('aria-expanded', 'false');
-    }
   });
 
   nodesLayer.addEventListener('click', function(e){
@@ -636,9 +660,10 @@
         p.photoIds = result.photoIds || galleryImages.map(function(photo){ return photo.id; });
         galleryImages = p.photos.filter(Boolean).slice(0,6).map(function(url, index){ return {id:p.photoIds[index] || null, url:url}; });
         galleryUploadStatus.className = 'gallery-upload-status success';
-        galleryUploadStatus.textContent = 'Photo order saved online.';
+        galleryUploadStatus.textContent = 'Photo order saved.';
         renderGallery(p);
         scheduleRender();
+        showToast('Photo order saved.');
       })
       .catch(function(error){ galleryUploadStatus.textContent = error.message || 'Could not save photo order.'; renderGallery(p); });
   }
@@ -809,16 +834,28 @@
     detailsEditor.classList.add('open');
     editName.focus();
   });
-  editCancel.addEventListener('click', function(){ detailsEditor.classList.remove('open'); });
+  editCancel.addEventListener('click', function(){
+    detailsEditor.classList.remove('open');
+    detailsConfirmBar.classList.remove('open');
+  });
+  var detailsConfirmBar = document.getElementById('detailsConfirmBar');
+  var detailsConfirmYes = document.getElementById('detailsConfirmYes');
+  var detailsConfirmNo = document.getElementById('detailsConfirmNo');
   detailsEditor.addEventListener('submit', function(e){
     e.preventDefault();
     if(!editingPerson) return;
     if(!editName.value.trim()) return;
+    detailsConfirmBar.classList.add('open');
+    detailsConfirmYes.focus();
+  });
+  detailsConfirmNo.addEventListener('click', function(){ detailsConfirmBar.classList.remove('open'); });
+  detailsConfirmYes.addEventListener('click', function(){
     editingPerson.name = editName.value.trim();
     editingPerson.birth = editBirth.value.trim();
     editingPerson.death = editDeath.value.trim();
     var persist = function(){
       detailsEditor.classList.remove('open');
+      detailsConfirmBar.classList.remove('open');
       scheduleRender();
       updateStatsAndLegend();
       openDetails(editingPerson);
@@ -829,22 +866,58 @@
       return fetch(endpoint, options).then(function(response){ if(!response.ok) throw new Error('Save failed'); return response.json(); }).then(function(result){
         persist();
         detailsEditorStatus.className = 'details-editor-status success';
-        detailsEditorStatus.textContent = 'Changes saved online.';
+        detailsEditorStatus.textContent = 'Changes saved.';
+        showToast('Changes saved.');
       });
     };
+    detailsConfirmBar.classList.remove('open');
     detailsEditorStatus.className = 'details-editor-status';
-    detailsEditorStatus.textContent = 'Saving changes online...';
-    saveData().catch(function(){ detailsEditorStatus.textContent = 'Changes could not be saved online. Try again.'; });
+    detailsEditorStatus.textContent = 'Saving changes...';
+    detailsConfirmYes.disabled = true;
+    saveData().catch(function(){
+      detailsConfirmYes.disabled = false;
+      detailsEditorStatus.textContent = 'Changes could not be saved online. Try again.';
+      showToast('Could not save changes.', 'error');
+    }).then(function(){ detailsConfirmYes.disabled = false; });
   });
 
+  var pendingUploadFile = null;
   galleryUploadInput.addEventListener('change', function(){
     var photo = galleryUploadInput.files[0];
     if(!photo || pendingGallerySlot < 0) return;
     if(photo.type.indexOf('image/') !== 0){ galleryUploadStatus.textContent = 'Please choose an image file.'; galleryUploadInput.value = ''; return; }
     if(photo.size > 32 * 1024 * 1024){ galleryUploadStatus.textContent = 'Please choose an image smaller than 32 MB.'; galleryUploadInput.value = ''; return; }
     if(galleryImages.length >= 6 && pendingGallerySlot !== 0){ galleryUploadStatus.textContent = 'The gallery already has six photos.'; galleryUploadInput.value = ''; return; }
+    pendingUploadFile = photo;
+    var reader = new FileReader();
+    reader.onload = function(event){
+      document.getElementById('photoConfirmPreview').src = event.target.result;
+      document.getElementById('photoConfirmStatus').textContent = '';
+      var pv = document.getElementById('photoConfirmView');
+      pv.classList.add('open');
+      pv.setAttribute('aria-hidden', 'false');
+      document.getElementById('photoConfirmOk').focus();
+    };
+    reader.readAsDataURL(photo);
+  });
+  function closePhotoConfirm(){
+    var pv = document.getElementById('photoConfirmView');
+    pv.classList.remove('open');
+    pv.setAttribute('aria-hidden', 'true');
+    pendingUploadFile = null;
+    galleryUploadInput.value = '';
+  }
+  document.getElementById('photoConfirmCancel').addEventListener('click', closePhotoConfirm);
+  document.getElementById('photoConfirmView').addEventListener('click', function(e){ if(e.target === this) closePhotoConfirm(); });
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && document.getElementById('photoConfirmView').classList.contains('open')) closePhotoConfirm(); });
+  document.getElementById('photoConfirmOk').addEventListener('click', function(){
+    var photo = pendingUploadFile;
+    if(!photo || !editingPerson) return;
+    var button = document.getElementById('photoConfirmOk');
+    closePhotoConfirm();
     galleryUploadStatus.className = 'gallery-upload-status';
-    galleryUploadStatus.textContent = 'Uploading photo online...';
+    galleryUploadStatus.textContent = 'Uploading photo...';
+    button.disabled = true;
     var data = new FormData();
     data.append('image', photo);
     data.append('personId', editingPerson.id);
@@ -855,12 +928,13 @@
         editingPerson.photos = result.photos || galleryImages.map(function(photo){ return photo.url; }).concat(result.url || []);
         editingPerson.photoIds = result.photoIds || galleryImages.map(function(photo){ return photo.id; });
         galleryImages = editingPerson.photos.filter(Boolean).slice(0,6).map(function(url, index){ return {id:editingPerson.photoIds[index] || null, url:url}; });
-        galleryUploadInput.value = '';
         galleryUploadStatus.className = 'gallery-upload-status success';
-        galleryUploadStatus.textContent = 'Photo uploaded and saved online.';
+        galleryUploadStatus.textContent = 'Photo uploaded and saved.';
         renderGallery(editingPerson);
+        showToast('Photo uploaded.');
       })
-      .catch(function(error){ galleryUploadInput.value = ''; galleryUploadStatus.textContent = error.message || 'Photo upload failed. Try again.'; });
+      .catch(function(error){ galleryUploadStatus.textContent = error.message || 'Photo upload failed. Try again.'; showToast('Photo upload failed.', 'error'); })
+      .then(function(){ button.disabled = false; });
   });
 
   function closeDetails(){
@@ -1081,7 +1155,10 @@
     var status = el.querySelector('.add-status');
     status.className = 'add-status';
     status.textContent = '';
-    el.querySelector('.add-create').textContent = isParents ? 'Add parents' : kind === 'spouse' ? 'Add spouse' : kind === 'child' ? 'Add child' : 'Add sibling';
+    var createButton = el.querySelector('.add-create');
+    createButton.dataset.confirm = '';
+    delete el.dataset.payload;
+    createButton.textContent = isParents ? 'Add parents' : kind === 'spouse' ? 'Add spouse' : kind === 'child' ? 'Add child' : 'Add sibling';
     positionAddPopover(addAnchorEl);
     el.querySelector(isParents ? '.add-mother-name' : '.add-name').focus();
   }
@@ -1139,38 +1216,67 @@
     var el = ensureAddPopover();
     var status = el.querySelector('.add-status');
     var createButton = el.querySelector('.add-create');
+    if(createButton.dataset.confirm === '1'){
+      createButton.dataset.confirm = '';
+      if(el.dataset.payload) performAdd(JSON.parse(el.dataset.payload));
+      return;
+    }
     var payload;
     if(addKind === 'parent'){
       var motherName = el.querySelector('.add-mother-name').value.trim();
       var fatherName = el.querySelector('.add-father-name').value.trim();
-      if(!motherName && !fatherName){ status.className = 'add-status error'; status.textContent = 'At least one parent name is required.'; return; }
+      status.className = 'add-status error';
+      if(!motherName && !fatherName){ status.textContent = 'At least one parent name is required.'; return; }
       var motherBirth = yearOrEmpty(el.querySelector('.add-mother-birth').value);
       var motherDeath = yearOrEmpty(el.querySelector('.add-mother-death').value);
       var fatherBirth = yearOrEmpty(el.querySelector('.add-father-birth').value);
       var fatherDeath = yearOrEmpty(el.querySelector('.add-father-death').value);
-      if(motherBirth === null || motherDeath === null){ status.className = 'add-status error'; status.textContent = 'Mother’s years must be empty or four-digit years.'; return; }
-      if(fatherBirth === null || fatherDeath === null){ status.className = 'add-status error'; status.textContent = 'Father’s years must be empty or four-digit years.'; return; }
+      if(motherBirth === null || motherDeath === null){ status.textContent = 'Mother’s years must be empty or four-digit years.'; return; }
+      if(fatherBirth === null || fatherDeath === null){ status.textContent = 'Father’s years must be empty or four-digit years.'; return; }
       payload = { action:'create', kind:'parent', personId:addAnchor.id };
       if(motherName) payload.mother = { name:motherName, birth:motherBirth, death:motherDeath };
       if(fatherName) payload.father = { name:fatherName, birth:fatherBirth, death:fatherDeath };
     } else {
       var name = el.querySelector('.add-name').value.trim();
-      if(!name){ status.className = 'add-status error'; status.textContent = 'A name is required.'; return; }
+      status.className = 'add-status error';
+      if(!name){ status.textContent = 'A name is required.'; return; }
       var birth = yearOrEmpty(el.querySelector('.add-birth').value);
       var death = yearOrEmpty(el.querySelector('.add-death').value);
-      if(birth === null || death === null){ status.className = 'add-status error'; status.textContent = 'Birth and death must be empty or four-digit years.'; return; }
+      if(birth === null || death === null){ status.textContent = 'Birth and death must be empty or four-digit years.'; return; }
+      var gender = el.querySelector('.add-gender').value;
       payload = {
         action:'create',
         kind:addKind,
         personId:addAnchor.id,
         name:name,
-        gender:el.querySelector('.add-gender').value,
+        gender:gender,
         birth:birth,
         death:death
       };
       if(addKind === 'child') payload.personId = childrenOwnerFor(addAnchor);
       if(addKind === 'sibling') payload.parentId = parentOf[addAnchor.id];
     }
+    el.dataset.payload = JSON.stringify(payload);
+    createButton.dataset.confirm = '1';
+    status.className = 'add-status';
+    var confirmMsg;
+    if(addKind === 'parent'){
+      var parts = [];
+      if(el.querySelector('.add-mother-name').value.trim()) parts.push('mother ' + el.querySelector('.add-mother-name').value.trim());
+      if(el.querySelector('.add-father-name').value.trim()) parts.push('father ' + el.querySelector('.add-father-name').value.trim());
+      confirmMsg = 'Add ' + parts.join(' and ') + ' for ' + addAnchor.name + '?';
+    } else {
+      confirmMsg = 'Add ' + el.querySelector('.add-name').value.trim() + ' as a ' + (addKind === 'spouse' ? 'partner' : addKind === 'child' ? 'child' : 'sibling') + '?';
+    }
+    status.textContent = confirmMsg;
+    createButton.textContent = 'Confirm add';
+    createButton.disabled = false;
+  }
+  function performAdd(payload){
+    var el = ensureAddPopover();
+    var status = el.querySelector('.add-status');
+    var createButton = el.querySelector('.add-create');
+    if(addSubmitting) return;
     addSubmitting = true;
     createButton.disabled = true;
     status.className = 'add-status';
@@ -1189,6 +1295,7 @@
           updateStatsAndLegend();
           var created = result.person && byId[result.person.id];
           openDetails(created || byId[payload.personId] || addAnchor);
+          showToast('Family member added.');
         })
         .catch(function(error){
           if(sendAttempts <= 3 && (!error.status || error.status >= 500)){
@@ -1630,6 +1737,7 @@
   }
   document.getElementById('in').onclick = function(){ scale = Math.min(1.6, scale+0.1); applyScale(); };
   document.getElementById('out').onclick = function(){ scale = Math.max(minimumScale(), scale-0.1); applyScale(); };
+  document.getElementById('fitScreen').onclick = function(){ fitToScreen(); };
   zoomSlider.addEventListener('input', function(){ scale = Math.max(minimumScale(), Math.min(1.6, Number(zoomSlider.value))); applyScale(); });
   window.addEventListener('resize', function(){
     var minScale = minimumScale();
@@ -1717,33 +1825,71 @@
   // ---- search ----
   var searchInput = document.getElementById('searchInput');
   var searchResults = document.getElementById('searchResults');
+  var searchActiveIndex = -1;
+  function escapeRegExp(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  function highlightName(name, q){
+    if(!q) return esc(name);
+    var re = new RegExp('(' + escapeRegExp(q) + ')', 'ig');
+    return esc(name).replace(re, '<mark>$1</mark>');
+  }
+  function miniAvatarHtml(p){
+    var photoUrl = Array.isArray(p.photos) ? p.photos.filter(Boolean)[0] : '';
+    if(photoUrl) return '<span class="sr-avatar"><img src="'+esc(photoUrl)+'" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'"><span class="sr-initials">'+esc(initials(p.name))+'</span></span>';
+    return '<span class="sr-avatar"><span class="sr-initials">'+esc(initials(p.name))+'</span></span>';
+  }
+  function setSearchActive(index){
+    var items = searchResults.querySelectorAll('.search-item');
+    if(!items.length) return;
+    searchActiveIndex = index < 0 ? items.length - 1 : (index >= items.length ? 0 : index);
+    searchResults.querySelectorAll('.search-item.active').forEach(function(el){ el.classList.remove('active'); });
+    items[searchActiveIndex].classList.add('active');
+    var item = items[searchActiveIndex];
+    if(item && item.scrollIntoView) item.scrollIntoView({block:'nearest'});
+  }
   function runSearch(){
     var q = searchInput.value.trim().toLowerCase();
     searchResults.innerHTML = '';
+    searchActiveIndex = -1;
+    searchInput.setAttribute('aria-expanded', 'false');
     if(!q){ searchResults.classList.remove('open'); return; }
     var matches = RAW.filter(function(person){
       return person.name !== 'Unknown' && person.name.toLowerCase().indexOf(q) !== -1;
     }).map(function(person){ return person.id;
     }).slice(0,8);
     if(!matches.length){
-      searchResults.innerHTML = '<div class="search-empty">No matches</div>';
+      searchResults.innerHTML = '<div class="search-empty">No family members match “'+esc(searchInput.value.trim())+'”.</div>';
       searchResults.classList.add('open');
+      searchInput.setAttribute('aria-expanded', 'true');
       return;
     }
     matches.forEach(function(id){
       var p = byId[id];
       var item = document.createElement('div');
       item.className = 'search-item';
-      item.innerHTML = '<span>'+esc(p.name)+'</span><span class="sr-gen">'+(structDepth[id] === undefined ? 'Other branch' : 'Gen '+(structDepth[id]+1))+'</span>';
+      item.setAttribute('role', 'option');
+      item.innerHTML = miniAvatarHtml(p) + '<span class="sr-name">'+highlightName(p.name, q)+'</span><span class="sr-gen">'+(structDepth[id] === undefined ? 'Other branch' : 'Gen '+(structDepth[id]+1))+'</span>';
+      item.addEventListener('mouseenter', function(){ searchActiveIndex = Array.prototype.indexOf.call(item.parentNode.children, item); updateSearchActiveClass(); });
       item.addEventListener('click', function(){ selectSearchResult(id); });
       searchResults.appendChild(item);
     });
     searchResults.classList.add('open');
+    searchInput.setAttribute('aria-expanded', 'true');
+    setSearchActive(0);
+  }
+  function updateSearchActiveClass(){
+    var items = searchResults.querySelectorAll('.search-item');
+    Array.prototype.forEach.call(items, function(el, i){ el.classList.toggle('active', i === searchActiveIndex); });
   }
   searchInput.addEventListener('input', runSearch);
   searchInput.addEventListener('keydown', function(e){
-    if(e.key === 'Escape'){ searchInput.value=''; searchResults.classList.remove('open'); searchInput.blur(); }
-    if(e.key === 'Enter'){ var first = searchResults.querySelector('.search-item'); if(first) first.click(); }
+    if(e.key === 'Escape'){ searchInput.value=''; searchResults.classList.remove('open'); searchInput.setAttribute('aria-expanded','false'); searchInput.blur(); }
+    else if(e.key === 'ArrowDown'){ e.preventDefault(); runSearch(); setSearchActive((searchActiveIndex<0?0:searchActiveIndex)+1); updateSearchActiveClass(); }
+    else if(e.key === 'ArrowUp'){ e.preventDefault(); setSearchActive(searchActiveIndex<=0 ? 7 : searchActiveIndex-1); updateSearchActiveClass(); }
+    else if(e.key === 'Enter'){
+      var items = searchResults.querySelectorAll('.search-item');
+      if(searchActiveIndex >= 0 && items[searchActiveIndex]) items[searchActiveIndex].click();
+      else { var first = searchResults.querySelector('.search-item'); if(first) first.click(); }
+    }
   });
   document.addEventListener('click', function(e){
     if(!e.target.closest('.search-wrap')) searchResults.classList.remove('open');
@@ -1909,7 +2055,7 @@
     var secondId = relationshipPersonBInput.dataset.personId || (people[1] && people[1].id);
     var first = byId[firstId] || people[0];
     var second = byId[secondId] || people[1] || people[0];
-    if(!first || !second){ relationshipResult.innerHTML = '<div class="relationship-empty">Choose two family members to begin the comparison.</div>'; return; }
+    if(!first || !second){ relationshipResult.innerHTML = '<div class="relationship-empty">Pick two family members (use the boxes or the quick picks above) to see how they are related.</div>'; return; }
     relationshipPersonAInput.dataset.personId = first.id;
     relationshipPersonBInput.dataset.personId = second.id;
     relationshipPersonAInput.value = first.name;
@@ -1937,11 +2083,69 @@
   if(people[1]){ relationshipPersonBInput.dataset.personId = people[1].id; relationshipPersonBInput.value = people[1].name; }
   renderRelationshipCheck();
 
+  // Quick-pick chips
+  var relationshipChips = document.getElementById('relationshipChips');
+  var chipCandidates = [ROOT_ID].concat(Object.keys(byId))
+    .filter(function(id){ var p = byId[id]; return p && p.name !== 'Unknown'; })
+    .filter(function(id, i, arr){ return arr.indexOf(id) === i; });
+  chipCandidates = chipCandidates.slice(0, 9);
+  chipCandidates.forEach(function(id){
+    var chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'rel-chip';
+    var p = byId[id];
+    chip.textContent = p.name;
+    chip.setAttribute('aria-label', 'Quick pick ' + p.name);
+    chip.addEventListener('click', function(){
+      if(!relationshipPersonAInput.dataset.personId || relationshipPersonAInput.dataset.personId === id){
+        setRelationshipSelection('a', id);
+      } else {
+        setRelationshipSelection('b', id);
+      }
+      hideRelationshipSuggestions();
+    });
+    relationshipChips.appendChild(chip);
+  });
+
   render();
   updateStatsAndLegend();
   requestAnimationFrame(fitToScreen);
 
-  // Indexable summary of the family tree for engines and screen readers (kept
+  // First-visit help overlay
+  var HELP_KEY = 'familyTreeSeenHelp';
+  var helpView = document.getElementById('helpView');
+  function showHelp(){
+    helpView.classList.add('open');
+    helpView.setAttribute('aria-hidden', 'false');
+    document.getElementById('helpGotIt').focus();
+  }
+  function closeHelp(){
+    helpView.classList.remove('open');
+    helpView.setAttribute('aria-hidden', 'true');
+    try { localStorage.setItem(HELP_KEY, '1'); } catch(e) {}
+  }
+  document.getElementById('helpGotIt').addEventListener('click', closeHelp);
+  helpView.addEventListener('click', function(e){ if(e.target === helpView) closeHelp(); });
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && helpView.classList.contains('open')) closeHelp(); });
+  var seenHelp = false;
+  try { seenHelp = localStorage.getItem(HELP_KEY) === '1'; } catch(e) {}
+  if(!seenHelp) requestAnimationFrame(function(){ setTimeout(showHelp, 400); });
+
+  // Success toasts
+  var toastContainer = document.getElementById('toastContainer');
+  function showToast(message, type){
+    type = type || 'success';
+    var toast = document.createElement('div');
+    toast.className = 'toast toast-' + type;
+    toast.textContent = message;
+    toastContainer.appendChild(toast);
+    setTimeout(function(){ toast.classList.add('show'); }, 10);
+    setTimeout(function(){
+      toast.classList.remove('show');
+      setTimeout(function(){ if(toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
+    }, 3200);
+  }
+
   // small; full genealogy lives in the interactive tree and /api/data.js).
   var familyNodes = RAW.map(function(person){
     return {
