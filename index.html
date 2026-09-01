@@ -557,46 +557,148 @@
     return id;
   }
 
-  function computeLayout(){
-    var widths = {}, positions = {}, maxDepth = 0, maxY = 0;
-    function widthOf(id){
+  function graphLayout(){
+    var childrenOf = {};
+    RAW.forEach(function(p){
+      var list = childrenOf[p.id] || (childrenOf[p.id] = []);
+      (p.children||[]).forEach(function(cid){ if(byId[cid]) list.push(cid); });
+    });
+    RAW.forEach(function(p){
+      (p.parents||[]).forEach(function(pid){ if(!byId[pid]) return; (childrenOf[pid] || (childrenOf[pid] = [])).push(p.id); });
+    });
+    var spouseOf = {};
+    RAW.forEach(function(p){ if(p.spouse && byId[p.spouse]) spouseOf[p.id] = p.spouse; });
+    var repOf = {};
+    RAW.forEach(function(p){ repOf[p.id] = p.id; });
+    RAW.forEach(function(p){
+      if(!p.spouse || !byId[p.spouse]) return;
+      var a = p.id, b = p.spouse;
+      var aKids = !!((byId[a].children||[]).filter(function(c){ return byId[c]; }).length);
+      var bKids = !!((byId[b].children||[]).filter(function(c){ return byId[c]; }).length);
+      var rep = (aKids && !bKids) ? a : (bKids && !aKids) ? b : a;
+      repOf[a] = rep; repOf[b] = rep;
+    });
+    var roots = RAW.filter(function(p){ return parentOf[p.id] === undefined && repOf[p.id] === p.id; }).map(function(p){ return p.id; });
+    var depth = {}, componentOf = {};
+    function bfs(root){
+      var q = [root], fi = 0;
+      depth[root] = 0; componentOf[root] = root;
+      while(fi < q.length){
+        var cur = q[fi++];
+        (childrenOf[cur]||[]).forEach(function(cid){
+          if(depth[cid] === undefined){ depth[cid] = depth[cur] + 1; componentOf[cid] = root; q.push(cid); }
+        });
+      }
+    }
+    roots.forEach(bfs);
+    RAW.forEach(function(p){
+      if(depth[p.id] === undefined && spouseOf[p.id] && byId[spouseOf[p.id]] && depth[spouseOf[p.id]] !== undefined){
+        depth[p.id] = depth[spouseOf[p.id]]; componentOf[p.id] = componentOf[spouseOf[p.id]];
+      }
+    });
+    RAW.forEach(function(p){ if(depth[p.id] === undefined){ roots.push(p.id); bfs(p.id); } });
+
+    var positions = {};
+    var couples = [];
+    var marriageLinks = [];
+    var parentLinks = [];
+    var childLinks = [];
+    var mainRoot = roots.indexOf(ROOT_ID) !== -1 ? ROOT_ID : roots[0];
+    var claimed = {};
+    var primaryWidths = {};
+
+    function widthOf(id, skipWidow){
       var p = byId[id];
-      var hasSpouse = !!partnerFor(p);
-      var spouse = partnerFor(p);
+      var sp = partnerFor(p);
+      var hasSpouse = !!sp && !skipWidow;
       var selfW = hasSpouse ? (CARD_W*2 + SPOUSE_GAP) : CARD_W;
-      var sibBranchW = siblingGroupWidth(hasSpouse ? spouse : p);
-      selfW += sibBranchW ? sibBranchW*2 : 0;
       var kids = (p.children||[]).filter(function(cid){ return byId[cid]; });
       var w;
-      if(collapsed.has(id) || !kids.length){
+      if(!kids.length || collapsed.has(id)){
         w = selfW;
       } else {
-        var kw = kids.map(widthOf);
-        var total = kw.reduce(function(a,b){ return a+b; }, 0) + GAP_X*(kw.length-1);
-        w = Math.max(selfW, total);
+        var kw = kids.map(function(cid){ return widthOf(cid); });
+        w = Math.max(selfW, kw.reduce(function(a,b){ return a+b; }, 0) + GAP_X*(kw.length-1));
       }
-      widths[id] = w;
       return w;
     }
-    var top = topAncestorId();
-    widthOf(top);
-    function place(id, left, depth, yOffset){
-      maxDepth = Math.max(maxDepth, depth);
-      var w = widths[id];
+
+    function placeSpine(id, left, depth, yOffset, depthOffset){
+      depthOffset = depthOffset || 0;
+      if(claimed[id]) return null;
+      claimed[id] = true;
+      var p = byId[id];
+      var sp = partnerFor(p);
+      var isRealSpouse = !!sp && !sp.placeholder;
+      var hasSpouse = !!sp;
+      var spouseElsewhere = isRealSpouse && claimed[sp.id];
+      var displaySpouse = hasSpouse && !spouseElsewhere;
+      var w = widthOf(id, spouseElsewhere);
+      primaryWidths[id] = w;
       var cx = left + w/2;
-      var y = depth*LEVEL_H + (yOffset || 0);
-      positions[id] = {x:cx, y:y, depth:depth};
-      maxY = Math.max(maxY, y);
-      var kids = (byId[id].children||[]).filter(function(cid){ return byId[cid]; });
+      var y = (depth+depthOffset)*LEVEL_H + (yOffset || 0);
+      var primaryLeft = displaySpouse ? (cx - (CARD_W + SPOUSE_GAP/2)) : (cx - CARD_W/2);
+      positions[id] = {left:primaryLeft, top:y, cx:cx, cy:y + CARD_H/2, gen:depth+depthOffset, depth:depth, placeholder:false, person:p};
+      if(displaySpouse){
+        if(isRealSpouse) claimed[sp.id] = true;
+        var spLeft = cx + SPOUSE_GAP/2;
+        positions[sp.id] = {left:spLeft, top:y, cx:cx, cy:y + CARD_H/2, gen:depth+depthOffset, depth:depth, placeholder:!!sp.placeholder, person:sp};
+        couples.push({primaryId:id, spouseId:sp.id, cx:cx, top:y, depth:depth+depthOffset});
+      } else {
+        couples.push({primaryId:id, spouseId:null, cx:cx, top:y, depth:depth+depthOffset});
+      }
+      if(isRealSpouse && spouseElsewhere) marriageLinks.push({a:id, b:sp.id});
+      var kids = (p.children||[]).filter(function(cid){ return byId[cid]; });
       if(!collapsed.has(id) && kids.length){
-        var kw = kids.map(function(cid){ return widths[cid]; });
+        var kw = kids.map(function(cid){ return widthOf(cid); });
         var totalKidsW = kw.reduce(function(a,b){ return a+b; }, 0) + GAP_X*(kw.length-1);
         var cursor = left + (w - totalKidsW)/2;
-        kids.forEach(function(cid,i){ place(cid, cursor, depth+1, (yOffset || 0) + i*CHILD_Y_STEP); cursor += kw[i] + GAP_X; });
+        kids.forEach(function(cid,i){
+          if(claimed[cid]){
+            parentLinks.push({parent:id, child:cid});
+          } else {
+            var placed = placeSpine(cid, cursor, depth+1, (yOffset || 0) + i*CHILD_Y_STEP, depthOffset);
+            if(!placed) parentLinks.push({parent:id, child:cid});
+            else childLinks.push({parent:id, child:cid});
+          }
+          cursor += (primaryWidths[cid] || widthOf(cid) || CARD_W) + GAP_X;
+        });
       }
+      return {w:w};
     }
-    place(top, 0, 0, 0);
-    return {widths:widths, positions:positions, maxDepth:maxDepth, maxY:maxY, totalWidth:widths[top]};
+
+    widthOf(mainRoot);
+    placeSpine(mainRoot, 0, 0, 0);
+
+    var branchOffset = (primaryWidths[mainRoot] || 0) + GAP_X*3;
+    roots.filter(function(r){ return r !== mainRoot; }).forEach(function(root){
+      if(claimed[root]) return;
+      var claimedKids = [];
+      var q = [root], seen = {}; seen[root] = true;
+      while(q.length){
+        var cur = q.shift();
+        (childrenOf[cur]||[]).forEach(function(cid){
+          if(seen[cid]) return; seen[cid] = true; q.push(cid);
+          if(claimed[cid]) claimedKids.push(cid);
+        });
+      }
+      var depthOffset = 0;
+      if(claimedKids.length){
+        var minGen = Math.min.apply(null, claimedKids.map(function(cid){ return positions[cid] ? positions[cid].gen : Infinity; }));
+        if(minGen !== Infinity) depthOffset = Math.max(0, minGen - 1);
+      }
+      var bw = widthOf(root);
+      placeSpine(root, branchOffset, 0, 0, depthOffset);
+      branchOffset += bw + GAP_X*3;
+    });
+
+    var maxRight = 0, maxBottom = 0;
+    Object.keys(positions).forEach(function(id){
+      var pos = positions[id];
+      maxRight = Math.max(maxRight, pos.left + CARD_W);
+      maxBottom = Math.max(maxBottom, pos.top + CARD_H);
+    });
+    return {positions:positions, couples:couples, marriageLinks:marriageLinks, parentLinks:parentLinks, childLinks:childLinks, maxRight:maxRight, maxBottom:maxBottom};
   }
 
   function curvePath(x1,y1,x2,y2){
@@ -1520,10 +1622,9 @@
   function render(){
     closeAddPopover();
     closeEdgeChoice();
-    var layout = computeLayout();
-    var positions = layout.positions, maxY = layout.maxY, totalWidth = layout.totalWidth;
-    var totalW = totalWidth + PAD*2;
-    var totalH = maxY + CARD_H + PAD*2;
+    var layout = graphLayout();
+    var totalW = layout.maxRight + PAD*2;
+    var totalH = layout.maxBottom + PAD*2;
     canvasWidth = totalW;
     canvasHeight = totalH;
     canvas.style.width = canvasWidth+'px';
@@ -1534,272 +1635,130 @@
     nodesLayer.innerHTML = '';
     svg.innerHTML = '';
     cardEls = {};
-    var renderedFamilyBranches = {};
-    var familyBranchCards = [];
 
-    Object.keys(positions).forEach(function(id){
-      var p = byId[id];
-      var pos = positions[id], x = pos.x, y = pos.y;
-      var spouse = partnerFor(p);
-      var hasSpouse = !!spouse;
-      var isRoot = id === ROOT_ID;
-      var primaryLeft = hasSpouse ? (x - (CARD_W + SPOUSE_GAP/2)) : (x - CARD_W/2);
-      var top = y + PAD;
-      var card = makeCard(p, {isRoot:isRoot});
-      card.style.left = (primaryLeft+PAD)+'px';
-      card.style.top = top+'px';
+    // 1) draw every positioned card exactly once (main tree + branch families)
+    Object.keys(layout.positions).forEach(function(id){
+      var pos = layout.positions[id];
+      var card = makeCard(pos.person, {isRoot: id === ROOT_ID, generation: pos.gen || 0});
+      card.style.left = (pos.left + PAD)+'px';
+      card.style.top = (pos.top + PAD)+'px';
       nodesLayer.appendChild(card);
       cardEls[id] = card;
+    });
 
-      if(hasSpouse){
-        var sp = spouse;
-        var spLeft = x + SPOUSE_GAP/2;
-        var spCard = makeCard(sp, {generation:structDepth[id] || 0});
-        spCard.style.left = (spLeft+PAD)+'px';
-        spCard.style.top = top+'px';
-        nodesLayer.appendChild(spCard);
-        cardEls[sp.id] = spCard;
-        var marriageHeight = Math.max(card.offsetHeight, spCard.offsetHeight);
-        var my = top + marriageHeight/2;
-        nodesLayer.appendChild(makeRelationLabel(spouseLabel(sp.gender), spLeft - 10, my, sp.id, 'side'));
-        var mline = document.createElementNS('http://www.w3.org/2000/svg','line');
-        mline.setAttribute('x1', primaryLeft+PAD+CARD_W); mline.setAttribute('x2', spLeft+PAD);
-        mline.setAttribute('y1', my); mline.setAttribute('y2', my);
-        mline.setAttribute('class','marriage-line');
-        mline.dataset.person = id;
-        svg.appendChild(mline);
-        svg.appendChild(makeMarriageHeart(x+PAD, my));
+    function coupleBottom(id){
+      var pos = layout.positions[id];
+      if(!pos || !cardEls[id]) return 0;
+      var h = cardEls[id].offsetHeight;
+      var person = pos.person;
+      var partner = person && (person.spouse || (person.children||[]).length ? partnerFor(person) : null);
+      var partnerEl = partner && cardEls[partner.id];
+      if(partnerEl) h = Math.max(h, partnerEl.offsetHeight);
+      return pos.top + PAD + h;
+    }
+
+    // parents whose couples route a child stub downward (same-tree childLinks or cross-tree parentLinks)
+    var routedParentSet = {};
+    layout.childLinks.forEach(function(l){ routedParentSet[l.parent] = true; });
+    layout.parentLinks.forEach(function(l){ routedParentSet[l.parent] = true; });
+
+    // 2) marriage lines + hearts for couples
+    layout.couples.forEach(function(c){
+      if(!c.spouseId) return;
+      var primary = cardEls[c.primaryId], spouse = cardEls[c.spouseId];
+      if(!primary || !spouse) return;
+      var topP = parseFloat(spouse.style.top);
+      var marriageHeight = Math.max(primary.offsetHeight, spouse.offsetHeight);
+      var my = topP + marriageHeight/2;
+      var pL = parseFloat(primary.style.left) + primary.offsetWidth;
+      var sL = parseFloat(spouse.style.left);
+      var cx = (pL + sL)/2;
+      var spPerson = layout.positions[c.spouseId].person;
+      nodesLayer.appendChild(makeRelationLabel(spouseLabel(spPerson ? spPerson.gender : 'unknown'), layout.positions[c.spouseId].left - 10, my, c.spouseId, 'side'));
+      var mline = document.createElementNS('http://www.w3.org/2000/svg','line');
+      mline.setAttribute('x1', pL); mline.setAttribute('x2', sL);
+      mline.setAttribute('y1', my); mline.setAttribute('y2', my);
+      mline.setAttribute('class','marriage-line');
+      mline.dataset.person = c.primaryId;
+      svg.appendChild(mline);
+      svg.appendChild(makeMarriageHeart(cx, my));
+      if(routedParentSet[c.primaryId]){
         var childBranchStart = document.createElementNS('http://www.w3.org/2000/svg','line');
-        childBranchStart.setAttribute('x1', x+PAD); childBranchStart.setAttribute('x2', x+PAD);
-        childBranchStart.setAttribute('y1', my); childBranchStart.setAttribute('y2', top + marriageHeight);
+        childBranchStart.setAttribute('x1', cx); childBranchStart.setAttribute('x2', cx);
+        childBranchStart.setAttribute('y1', my); childBranchStart.setAttribute('y2', topP + marriageHeight);
         childBranchStart.setAttribute('class','edge');
-        svg.appendChild(relateGraphic(childBranchStart, [id, sp.id]));
-      }
-
-      var siblingOwner = hasSpouse ? spouse : p;
-      var siblings = siblingsFor(siblingOwner);
-      if(siblings.length){
-        var siblingStart = (hasSpouse ? spLeft + CARD_W : primaryLeft + CARD_W) + SIBLING_GAP;
-        var siblingRailY = top + card.offsetHeight/2;
-        var siblingRailStart = hasSpouse ? spLeft + CARD_W + 8 : primaryLeft + CARD_W + 8;
-        var siblingRailEnd = siblingStart - 10;
-        var siblingRail = document.createElementNS('http://www.w3.org/2000/svg','line');
-        siblingRail.setAttribute('x1', siblingRailStart+PAD); siblingRail.setAttribute('x2', siblingRailEnd+PAD);
-        siblingRail.setAttribute('y1', siblingRailY); siblingRail.setAttribute('y2', siblingRailY);
-        siblingRail.setAttribute('class','sibling-line');
-        siblingRail.dataset.person = siblingOwner.id;
-        svg.appendChild(siblingRail);
-        nodesLayer.appendChild(makeRelationLabel('Sibling', siblingStart - 10, siblingRailY, siblingOwner.id, 'side'));
-        siblings.forEach(function(sibling, siblingIndex){
-          var siblingLeft = siblingStart + siblings.slice(0, siblingIndex).reduce(function(width, previous){
-            return width + Math.max(CARD_W + (partnerFor(previous) ? CARD_W + SPOUSE_GAP : 0), CARD_W) + GAP_X;
-          }, 0);
-          var siblingTop = top + (siblingIndex + 1)*CHILD_Y_STEP;
-          var siblingCard = makeCard(sibling, {generation:structDepth[sibling.id] || 0});
-          siblingCard.style.left = (siblingLeft+PAD)+'px';
-          siblingCard.style.top = siblingTop+'px';
-          nodesLayer.appendChild(siblingCard);
-          cardEls[sibling.id] = siblingCard;
-          var siblingConnector = document.createElementNS('http://www.w3.org/2000/svg','line');
-          siblingConnector.setAttribute('x1', siblingLeft+PAD+CARD_W/2); siblingConnector.setAttribute('x2', siblingLeft+PAD+CARD_W/2);
-          siblingConnector.setAttribute('y1', siblingRailY); siblingConnector.setAttribute('y2', siblingTop + 8);
-          siblingConnector.setAttribute('class','sibling-line');
-          siblingConnector.dataset.person = siblingOwner.id;
-          svg.appendChild(siblingConnector);
-
-          var siblingSpouse = partnerFor(sibling);
-          if(siblingSpouse){
-            var siblingSpouseLeft = siblingLeft + CARD_W + SPOUSE_GAP;
-            var siblingSpouseCard = makeCard(siblingSpouse, {generation:structDepth[sibling.id] || 0});
-            siblingSpouseCard.style.left = (siblingSpouseLeft+PAD)+'px';
-            siblingSpouseCard.style.top = siblingTop+'px';
-            nodesLayer.appendChild(siblingSpouseCard);
-            cardEls[siblingSpouse.id] = siblingSpouseCard;
-            familyBranchCards.push(siblingSpouseCard);
-            var siblingMarriageLine = document.createElementNS('http://www.w3.org/2000/svg','line');
-            siblingMarriageLine.setAttribute('x1', siblingLeft+PAD+CARD_W); siblingMarriageLine.setAttribute('x2', siblingSpouseLeft+PAD);
-            siblingMarriageLine.setAttribute('y1', siblingTop+card.offsetHeight/2); siblingMarriageLine.setAttribute('y2', siblingTop+card.offsetHeight/2);
-            siblingMarriageLine.setAttribute('class','marriage-line');
-            svg.appendChild(relateGraphic(siblingMarriageLine, [sibling.id, siblingSpouse.id]));
-          }
-          var siblingChildren = (sibling.children || []).map(function(childId){ return byId[childId]; }).filter(Boolean);
-          var siblingMarriageCenter = siblingLeft + CARD_W + SPOUSE_GAP/2;
-          var siblingHouseholdHeight = siblingSpouse ? Math.max(card.offsetHeight, siblingSpouseCard.offsetHeight) : card.offsetHeight;
-          var siblingMarriageY = siblingTop + siblingHouseholdHeight/2;
-          var siblingChildrenStartY = siblingTop + siblingHouseholdHeight;
-          siblingChildren.forEach(function(child, childIndex){
-            var childLeft = siblingMarriageCenter - CARD_W/2 + (childIndex - (siblingChildren.length-1)/2)*(CARD_W + GAP_X);
-            var childTop = siblingTop + LEVEL_H;
-            var childCard = makeCard(child, {generation:(structDepth[sibling.id] || 0) + 1});
-            childCard.style.left = (childLeft+PAD)+'px';
-            childCard.style.top = childTop+'px';
-            nodesLayer.appendChild(childCard);
-            cardEls[child.id] = childCard;
-            familyBranchCards.push(childCard);
-            nodesLayer.appendChild(makeRelationLabel(relLabel(child.gender), childLeft + CARD_W/2, childTop, sibling.id, 'above'));
-            var childPath = document.createElementNS('http://www.w3.org/2000/svg','path');
-            setCurveGraphic(childPath, siblingMarriageCenter+PAD, siblingChildrenStartY, childLeft+PAD+CARD_W/2, childTop);
-            childPath.setAttribute('class','edge');
-            svg.appendChild(relateGraphic(childPath, [sibling.id, child.id]));
-          });
-          if(siblingSpouse){
-            svg.appendChild(relateGraphic(makeMarriageHeart(siblingMarriageCenter+PAD, siblingMarriageY), [sibling.id, siblingSpouse.id]));
-          }
-          if(siblingSpouse && siblingChildren.length){
-            var siblingChildBranchStart = document.createElementNS('http://www.w3.org/2000/svg','line');
-            siblingChildBranchStart.setAttribute('x1', siblingMarriageCenter+PAD); siblingChildBranchStart.setAttribute('x2', siblingMarriageCenter+PAD);
-            siblingChildBranchStart.setAttribute('y1', siblingMarriageY); siblingChildBranchStart.setAttribute('y2', siblingChildrenStartY);
-            siblingChildBranchStart.setAttribute('class','edge');
-            svg.appendChild(relateGraphic(siblingChildBranchStart, [sibling.id, siblingSpouse.id]));
-          }
-
-          [parentOf[sibling.id], parentOf[siblingOwner.id]].concat(sibling.parents || [], siblingOwner.parents || []).filter(function(parentId, parentIndex, parentIds){
-            return parentId && parentIds.indexOf(parentId) === parentIndex;
-          }).forEach(function(parentId){
-            var parent = byId[parentId];
-            if(!parent || positions[parent.id] || renderedFamilyBranches[parent.id]) return;
-            renderedFamilyBranches[parent.id] = true;
-            var parentTop = Math.max(PAD, top - LEVEL_H);
-            var parentLeft = siblingLeft;
-            var parentCard = makeCard(parent, {generation:Math.max(0, (structDepth[sibling.id] || 1) - 1)});
-            parentCard.style.left = (parentLeft+PAD)+'px';
-            parentCard.style.top = parentTop+'px';
-            nodesLayer.appendChild(parentCard);
-            cardEls[parent.id] = parentCard;
-            familyBranchCards.push(parentCard);
-            var parentSpouse = partnerFor(parent);
-            if(parentSpouse){
-              var parentSpouseLeft = parentLeft + CARD_W + SPOUSE_GAP;
-              var parentSpouseCard = makeCard(parentSpouse, {generation:Math.max(0, (structDepth[sibling.id] || 1) - 1)});
-              parentSpouseCard.style.left = (parentSpouseLeft+PAD)+'px';
-              parentSpouseCard.style.top = parentTop+'px';
-              nodesLayer.appendChild(parentSpouseCard);
-              cardEls[parentSpouse.id] = parentSpouseCard;
-              familyBranchCards.push(parentSpouseCard);
-              var parentMarriageLine = document.createElementNS('http://www.w3.org/2000/svg','line');
-              parentMarriageLine.setAttribute('x1', parentLeft+PAD+CARD_W); parentMarriageLine.setAttribute('x2', parentSpouseLeft+PAD);
-              parentMarriageLine.setAttribute('y1', parentTop+parentCard.offsetHeight/2); parentMarriageLine.setAttribute('y2', parentTop+parentCard.offsetHeight/2);
-              parentMarriageLine.setAttribute('class','marriage-line');
-              svg.appendChild(relateGraphic(parentMarriageLine, [parent.id, parentSpouse.id]));
-              svg.appendChild(relateGraphic(makeMarriageHeart(parentLeft+PAD+CARD_W+SPOUSE_GAP/2, parentTop+parentCard.offsetHeight/2), [parent.id, parentSpouse.id]));
-            }
-            var parentHouseholdHeight = parentSpouse ? Math.max(parentCard.offsetHeight, parentSpouseCard.offsetHeight) : parentCard.offsetHeight;
-            var parentBranchX = parentSpouse ? parentLeft + PAD + CARD_W + SPOUSE_GAP/2 : parentLeft + PAD + CARD_W/2;
-            var parentBranchY = parentTop + parentHouseholdHeight;
-            if(parentSpouse){
-              var parentDropdown = document.createElementNS('http://www.w3.org/2000/svg','line');
-              parentDropdown.setAttribute('x1', parentBranchX); parentDropdown.setAttribute('x2', parentBranchX);
-              parentDropdown.setAttribute('y1', parentTop+parentHouseholdHeight/2); parentDropdown.setAttribute('y2', parentBranchY);
-              parentDropdown.setAttribute('class','edge');
-              svg.appendChild(relateGraphic(parentDropdown, [parent.id, parentSpouse.id]));
-            }
-            var parentChildren = (parent.children || []).map(function(childId){ return byId[childId]; }).filter(Boolean);
-            parentChildren.forEach(function(child){
-              var childCard = cardEls[child.id];
-              if(!childCard) return;
-              var childLeft = parseFloat(childCard.style.left), childTop = parseFloat(childCard.style.top);
-              var parentChildPath = document.createElementNS('http://www.w3.org/2000/svg','path');
-              setCurveGraphic(parentChildPath, parentBranchX, parentBranchY, childLeft + CARD_W/2, childTop);
-              parentChildPath.setAttribute('class','edge');
-              svg.appendChild(relateGraphic(parentChildPath, [parent.id, child.id]));
-            });
-          });
-        });
-      }
-
-      var kids = (p.children||[]).filter(function(cid){ return byId[cid]; });
-      if(!collapsed.has(id) && kids.length){
-        var parentBottomY = top + (hasSpouse ? marriageHeight : card.offsetHeight);
-        var childEndpoints = [];
-        kids.forEach(function(cid){
-          var kp = positions[cid];
-          var childHasSpouse = !!partnerFor(byId[cid]);
-          var childPrimaryLeft = childHasSpouse ? kp.x - (CARD_W + SPOUSE_GAP/2) : kp.x - CARD_W/2;
-          var kx = childPrimaryLeft + PAD + CARD_W/2, ky = kp.y + PAD;
-          childEndpoints.push({x:kx,y:ky});
-          var path = document.createElementNS('http://www.w3.org/2000/svg','path');
-          setCurveGraphic(path, x+PAD, parentBottomY, kx, ky);
-          path.setAttribute('class','edge');
-          path.dataset.parent = id; path.dataset.child = cid;
-          svg.appendChild(path);
-          nodesLayer.appendChild(makeRelationLabel(relLabel(byId[cid].gender), kx - PAD, ky, id, 'above'));
-        });
-        if(childEndpoints.length > 1){
-          var siblingRailY = Math.min.apply(null, childEndpoints.map(function(endpoint){ return endpoint.y; })) - 12;
-          var siblingRail = document.createElementNS('http://www.w3.org/2000/svg','line');
-          siblingRail.setAttribute('x1', childEndpoints[0].x); siblingRail.setAttribute('x2', childEndpoints[childEndpoints.length-1].x);
-          siblingRail.setAttribute('y1', siblingRailY); siblingRail.setAttribute('y2', siblingRailY);
-          siblingRail.setAttribute('class','sibling-line');
-          siblingRail.dataset.parent = id;
-          svg.appendChild(siblingRail);
-          childEndpoints.forEach(function(endpoint){
-            var siblingDrop = document.createElementNS('http://www.w3.org/2000/svg','line');
-            siblingDrop.setAttribute('x1', endpoint.x); siblingDrop.setAttribute('x2', endpoint.x);
-            siblingDrop.setAttribute('y1', siblingRailY); siblingDrop.setAttribute('y2', endpoint.y);
-            siblingDrop.setAttribute('class','sibling-line');
-            siblingDrop.dataset.parent = id;
-            svg.appendChild(siblingDrop);
-          });
-        }
+        svg.appendChild(relateGraphic(childBranchStart, [c.primaryId, c.spouseId]));
       }
     });
 
-    function shiftRelatedGraphics(cardId, deltaX){
-      Array.prototype.forEach.call(svg.querySelectorAll('[data-related-cards]'), function(graphic){
-        var relatedCards = graphic.dataset.relatedCards.split(' ');
-        if(relatedCards.indexOf(cardId) === -1) return;
-        if(graphic.tagName.toLowerCase() === 'line'){
-          if(relatedCards[0] === cardId && graphic.hasAttribute('x1')) graphic.setAttribute('x1', Number(graphic.getAttribute('x1')) + deltaX);
-          if(relatedCards[1] === cardId && graphic.hasAttribute('x2')) graphic.setAttribute('x2', Number(graphic.getAttribute('x2')) + deltaX);
-        } else if(graphic.tagName.toLowerCase() === 'path' && graphic.dataset.x1){
-          if(relatedCards[0] === cardId) graphic.dataset.x1 = Number(graphic.dataset.x1) + deltaX;
-          if(relatedCards[1] === cardId) graphic.dataset.x2 = Number(graphic.dataset.x2) + deltaX;
-          graphic.setAttribute('d', curvePath(Number(graphic.dataset.x1), Number(graphic.dataset.y1), Number(graphic.dataset.x2), Number(graphic.dataset.y2)));
-        } else if(graphic.classList.contains('marriage-heart') && graphic.hasAttribute('x')){
-          graphic.setAttribute('x', Number(graphic.getAttribute('x')) + deltaX/2);
-        }
+    // 3) same-tree parent -> child curves (with a sibling rail across the children)
+    var childrenByParent = {};
+    layout.childLinks.forEach(function(l){
+      (childrenByParent[l.parent] = childrenByParent[l.parent] || []).push(l.child);
+    });
+    Object.keys(childrenByParent).forEach(function(parentId){
+      var startX = layout.positions[parentId].cx + PAD;
+      var startY = coupleBottom(parentId);
+      var childEndpoints = [];
+      childrenByParent[parentId].forEach(function(cid){
+        var cpos = layout.positions[cid];
+        if(!cpos) return;
+        var kx = cpos.cx + PAD, ky = cpos.top + PAD;
+        childEndpoints.push({x:kx, y:ky});
+        var path = document.createElementNS('http://www.w3.org/2000/svg','path');
+        setCurveGraphic(path, startX, startY, kx, ky);
+        path.setAttribute('class','edge');
+        path.dataset.parent = parentId; path.dataset.child = cid;
+        svg.appendChild(path);
+        nodesLayer.appendChild(makeRelationLabel(relLabel(cpos.person ? cpos.person.gender : 'unknown'), kx - PAD, ky, parentId, 'above'));
       });
-      Array.prototype.forEach.call(nodesLayer.querySelectorAll('.relation-label[data-owner="'+cardId+'"]'), function(label){
-        label.style.left = (parseFloat(label.style.left) + deltaX) + 'px';
-      });
-    }
-    function moveFamilyBranchCard(branchCard, deltaX){
-      var cardsToMove = [branchCard];
-      var person = byId[branchCard.dataset.id];
-      var spouse = person && partnerFor(person);
-      var spouseCard = spouse && cardEls[spouse.id];
-      if(spouseCard && familyBranchCards.indexOf(spouseCard) !== -1) cardsToMove.push(spouseCard);
-      cardsToMove.forEach(function(card){
-        card.style.left = (parseFloat(card.style.left) + deltaX) + 'px';
-        shiftRelatedGraphics(card.dataset.id, deltaX);
-      });
-    }
-
-    var allCards = Array.prototype.slice.call(nodesLayer.querySelectorAll('.person'));
-    familyBranchCards.forEach(function(branchCard){
-      var moved = true;
-      while(moved){
-        moved = false;
-        var branchLeft = parseFloat(branchCard.style.left);
-        var branchTop = parseFloat(branchCard.style.top);
-        var branchRight = branchLeft + branchCard.offsetWidth;
-        var branchBottom = branchTop + branchCard.offsetHeight;
-        for(var oi = 0; oi < allCards.length; oi++){
-          var otherCard = allCards[oi];
-          if(otherCard === branchCard) continue;
-          var otherLeft = parseFloat(otherCard.style.left);
-          var otherTop = parseFloat(otherCard.style.top);
-          var otherRight = otherLeft + otherCard.offsetWidth;
-          var otherBottom = otherTop + otherCard.offsetHeight;
-          if(branchLeft < otherRight && branchRight > otherLeft && branchTop < otherBottom && branchBottom > otherTop){
-            var deltaX = otherRight + GAP_X - branchLeft;
-            branchLeft = otherRight + GAP_X;
-            branchRight = branchLeft + branchCard.offsetWidth;
-            moveFamilyBranchCard(branchCard, deltaX);
-            moved = true;
-          }
-        }
+      if(childEndpoints.length > 1){
+        var siblingRailY = Math.min.apply(null, childEndpoints.map(function(endpoint){ return endpoint.y; })) - 12;
+        var siblingRail = document.createElementNS('http://www.w3.org/2000/svg','line');
+        siblingRail.setAttribute('x1', childEndpoints[0].x); siblingRail.setAttribute('x2', childEndpoints[childEndpoints.length-1].x);
+        siblingRail.setAttribute('y1', siblingRailY); siblingRail.setAttribute('y2', siblingRailY);
+        siblingRail.setAttribute('class','sibling-line');
+        siblingRail.dataset.parent = parentId;
+        svg.appendChild(siblingRail);
+        childEndpoints.forEach(function(endpoint){
+          var siblingDrop = document.createElementNS('http://www.w3.org/2000/svg','line');
+          siblingDrop.setAttribute('x1', endpoint.x); siblingDrop.setAttribute('x2', endpoint.x);
+          siblingDrop.setAttribute('y1', siblingRailY); siblingDrop.setAttribute('y2', endpoint.y);
+          siblingDrop.setAttribute('class','sibling-line');
+          siblingDrop.dataset.parent = parentId;
+          svg.appendChild(siblingDrop);
+        });
       }
+    });
+
+    // 4) cross-tree parent -> child links (in-law families connected to the main tree)
+    layout.parentLinks.forEach(function(l){
+      var pp = layout.positions[l.parent], cp = layout.positions[l.child];
+      if(!pp || !cp) return;
+      var startX = pp.cx + PAD, startY = coupleBottom(l.parent);
+      var endX = cp.cx + PAD, endY = cp.top + PAD;
+      var path = document.createElementNS('http://www.w3.org/2000/svg','path');
+      setCurveGraphic(path, startX, startY, endX, endY);
+      path.setAttribute('class','edge');
+      path.dataset.parent = l.parent; path.dataset.child = l.child;
+      svg.appendChild(path);
+    });
+
+    // 5) cross-tree marriage links (spouses living in different family trees)
+    layout.marriageLinks.forEach(function(l){
+      var a = cardEls[l.a], b = cardEls[l.b];
+      if(!a || !b) return;
+      var ax = parseFloat(a.style.left) + a.offsetWidth;
+      var ay = parseFloat(a.style.top) + a.offsetHeight/2;
+      var bx = parseFloat(b.style.left);
+      var by = parseFloat(b.style.top) + b.offsetHeight/2;
+      var mline = document.createElementNS('http://www.w3.org/2000/svg','line');
+      mline.setAttribute('x1', ax); mline.setAttribute('x2', bx);
+      mline.setAttribute('y1', ay); mline.setAttribute('y2', by);
+      mline.setAttribute('class','marriage-line');
+      mline.dataset.person = l.a;
+      svg.appendChild(mline);
+      svg.appendChild(makeMarriageHeart((ax+bx)/2, (ay+by)/2));
     });
 
     applyScale();

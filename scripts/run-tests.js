@@ -100,6 +100,61 @@ function section(name) { console.log('\n' + name); }
   const rootPerson = people.find((p) => p.id === 'padmanabh');
   assert(!!rootPerson, 'root person padmanabh present');
 
+  section('unified graph layout (from index.html)');
+  const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
+  assert(!!scriptMatch, 'inline script present in index.html');
+  if (scriptMatch) {
+    const inlineScript = scriptMatch[1];
+    const glStartIdx = inlineScript.indexOf('function graphLayout(){');
+    const glEndIdx = inlineScript.indexOf('function curvePath(', glStartIdx);
+    assert(glStartIdx !== -1 && glEndIdx !== -1, 'graphLayout function found');
+    const glSrc = inlineScript.slice(glStartIdx, glEndIdx);
+    const CARD_W = 150, CARD_H = 220, GAP_X = 52, SPOUSE_GAP = 44, SIBLING_GAP = 48, LEVEL_GAP = 200, CHILD_Y_STEP = 10, PAD = 70;
+    const LEVEL_H = CARD_H + LEVEL_GAP;
+    const layoutParentOf = {};
+    people.forEach((p) => (p.children || []).forEach((c) => { if (byId[c]) layoutParentOf[c] = p.id; }));
+    people.forEach((p) => (p.parents || []).forEach((pid) => { if (byId[pid] && layoutParentOf[p.id] === undefined) layoutParentOf[p.id] = pid; }));
+    const collapsed = new Set();
+    const partnerForLayout = (p) => {
+      if (p.spouse && byId[p.spouse]) return byId[p.spouse];
+      if ((p.children || []).some((c) => byId[c])) return { id: p.id + '-spouse-placeholder', name: 'Spouse', gender: 'unknown', birth: '', death: '', children: [], placeholder: true };
+      return null;
+    };
+    const makeGraphLayout = new Function(
+      'RAW', 'byId', 'ROOT_ID', 'parentOf', 'partnerFor', 'collapsed',
+      'CARD_W', 'CARD_H', 'GAP_X', 'SPOUSE_GAP', 'SIBLING_GAP', 'LEVEL_GAP', 'CHILD_Y_STEP', 'PAD', 'LEVEL_H',
+      glSrc + '\n return graphLayout;'
+    );
+    const layout = makeGraphLayout(people, byId, 'padmanabh', layoutParentOf, partnerForLayout, collapsed,
+      CARD_W, CARD_H, GAP_X, SPOUSE_GAP, SIBLING_GAP, LEVEL_GAP, CHILD_Y_STEP, PAD, LEVEL_H)();
+    const placedIds = Object.keys(layout.positions).filter((id) => !layout.positions[id].placeholder);
+    const missing = people.filter((p) => placedIds.indexOf(p.id) === -1).map((p) => p.id);
+    assert(missing.length === 0, 'every person is positioned exactly once (missing: ' + missing.join(', ') + ')');
+    let overlapCount = 0;
+    for (let i = 0; i < placedIds.length; i++) {
+      for (let j = i + 1; j < placedIds.length; j++) {
+        const a = layout.positions[placedIds[i]], b = layout.positions[placedIds[j]];
+        if (a.left < b.left + CARD_W && b.left < a.left + CARD_W && a.top < b.top + CARD_H && b.top < a.top + CARD_H) overlapCount++;
+      }
+    }
+    assert(overlapCount === 0, 'no overlapping cards (' + overlapCount + ' overlaps)');
+    const linkOk = layout.childLinks.concat(layout.parentLinks).every((l) => layout.positions[l.parent] && layout.positions[l.child]);
+    assert(linkOk, 'every parent/child link connects two positioned cards');
+    const couplesOk = layout.couples.every((c) => c.spouseId === null || (layout.positions[c.primaryId] && layout.positions[c.spouseId]));
+    assert(couplesOk, 'every couple has positioned partner cards');
+    const rootSet = new Set(['padmanabh', 'taranath-bhandarkar']);
+    const disconnected = [];
+    people.forEach((p) => {
+      if (rootSet.has(p.id)) return;
+      const linkedAsChild = layout.childLinks.concat(layout.parentLinks).some((l) => l.child === p.id);
+      const linkedAsSpouse = layout.couples.some((c) => c.primaryId === p.id || c.spouseId === p.id);
+      const crossMarried = layout.marriageLinks.some((l) => l.a === p.id || l.b === p.id);
+      if (!linkedAsChild && !linkedAsSpouse && !crossMarried) disconnected.push(p.id);
+    });
+    assert(disconnected.length === 0, 'every positioned person is connected via parent, spouse, or marriage (stray: ' + disconnected.join(', ') + ')');
+  }
+
   console.log('\n------------------------------------');
   if (failed) {
     console.log('FAIL: ' + failed + ' failed, ' + passed + ' passed');
