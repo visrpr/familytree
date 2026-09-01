@@ -134,10 +134,39 @@ header{padding:14px 26px 13px;border-bottom:1px solid var(--brass-line);backgrou
 .person.placeholder{border-style:dashed;border-color:var(--unknown-text)}
 .person.placeholder .name{font-style:italic;color:var(--unknown-text)}
 .person.root{border-color:var(--brass);border-width:1.5px}
-.card-add{position:absolute;top:-9px;right:-9px;width:26px;height:26px;border:1px solid rgba(255,250,240,.85);border-radius:50%;background:var(--brass-deep);color:#fffaf0;font:700 15px/1 'Inter',-apple-system,'Segoe UI',sans-serif;cursor:pointer;box-shadow:var(--shadow-card);opacity:0;transform:scale(.65);transition:opacity var(--dur) var(--ease),transform var(--dur) var(--ease),background var(--dur);z-index:6}
-.person:hover .card-add,.person:focus-within .card-add{opacity:1;transform:scale(1)}
-.card-add:hover,.card-add:focus-visible{background:var(--maroon)}
-@media (hover:none){.card-add{opacity:.92;transform:scale(1)}}
+/* Directional edge add zones — invisible hotspots around card perimeter */
+.edge-add-zone{position:absolute;z-index:7;display:flex;align-items:center;justify-content:center;pointer-events:auto}
+.edge-add-zone.top{top:-16px;left:50%;transform:translateX(-50%);width:64px;height:24px}
+/* Root cards carry the "Family Founder" badge on the top edge — lift the + clear of it */
+.person.root .edge-add-zone.top{top:-36px;height:26px}
+.edge-add-zone.bottom{bottom:-16px;left:50%;transform:translateX(-50%);width:64px;height:24px}
+.edge-add-zone.left{left:-16px;top:50%;transform:translateY(-50%);width:24px;height:64px}
+.edge-add-zone.right{right:-16px;top:50%;transform:translateY(-50%);width:24px;height:64px}
+.edge-add-btn{width:22px;height:22px;border:1px solid rgba(255,250,240,.85);border-radius:50%;background:var(--brass-deep);color:#fffaf0;font:700 14px/1 'Inter',-apple-system,'Segoe UI',sans-serif;text-align:center;cursor:pointer;box-shadow:0 2px 7px rgba(50,38,14,.22);opacity:0;transform:scale(.6);transition:opacity var(--dur) var(--ease),transform var(--dur) var(--ease),background var(--dur);pointer-events:none}
+/* The + reveals only on the zone actually hovered (edge-specific) or when a zone is keyboard-focused */
+.edge-add-zone:hover .edge-add-btn,.person:focus-within .edge-add-btn{opacity:1;transform:scale(1);pointer-events:auto}
+.edge-add-btn:hover,.edge-add-btn:focus-visible{background:var(--maroon)}
+/* Hide the "Click for details" tooltip while an edge zone is active (they share the bottom edge) */
+.person:has(.edge-add-zone:hover):after,.person:has(.edge-add-zone:focus-within):after{content:''}
+/* Disabled child zone (no spouse yet) */
+.edge-add-zone.disabled .edge-add-btn{background:#a89b84;cursor:not-allowed;border-color:rgba(255,250,240,.6)}
+.edge-add-zone.disabled:hover .edge-add-btn{background:#8f8370}
+/* No action possible in this direction — hide the + entirely and let clicks fall through */
+.edge-add-zone.no-action{pointer-events:none}
+.edge-add-zone.no-action .edge-add-btn{display:none}
+
+/* Inline choice popup (2-option bar anchored to an edge) */
+.edge-choice{position:fixed;z-index:1250;display:none;gap:3px;padding:5px;background:var(--paper-grad);border:1px solid var(--brass-line);border-radius:var(--r-sm);box-shadow:var(--shadow-float);white-space:nowrap}
+.edge-choice.open{display:flex}
+.edge-choice button{border:1px solid transparent;background:transparent;padding:6px 11px;border-radius:6px;font:600 11px 'Inter',-apple-system,'Segoe UI',sans-serif;cursor:pointer;color:var(--ink-soft);transition:background var(--dur),color var(--dur),border-color var(--dur)}
+.edge-choice button:hover{border-color:rgba(156,122,58,.35);background:var(--brass-tint);color:var(--brass-deep)}
+.edge-choice-empty{padding:2px 6px;color:var(--muted);font-size:11.5px}
+
+/* Touch devices: keep all available + icons visible */
+@media (hover:none){
+  .person .edge-add-btn{opacity:.9;transform:scale(1);pointer-events:auto}
+  .edge-add-zone.disabled .edge-add-btn{opacity:.5}
+}
 
 .relation-label{position:absolute;z-index:2;transform:translateX(-50%);height:18px;line-height:18px;font:600 8.5px/18px 'Inter',-apple-system,'Segoe UI',sans-serif;text-transform:uppercase;letter-spacing:.15em;color:#fff;background:rgba(0,0,0,.5);padding:0 8px;border-radius:var(--r-xs);white-space:nowrap}
 .relation-label.endpoint-label{height:16px;line-height:16px;font-size:8px;letter-spacing:.1em;color:#fff;background:rgba(0,0,0,.5);border:0;padding:0 6px;border-radius:5px;box-shadow:0 2px 5px rgba(50,38,14,.08)}
