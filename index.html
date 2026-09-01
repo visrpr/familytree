@@ -311,6 +311,9 @@
     if(zone){
       e.stopPropagation();
       var person = byId[zone.dataset.person];
+      if(!person && zone.dataset.placeholderOwner && byId[zone.dataset.placeholderOwner]){
+        person = partnerFor(byId[zone.dataset.placeholderOwner]);
+      }
       if(person) handleEdgeZone(zone, person);
       return;
     }
@@ -780,10 +783,17 @@
       detailsRelations.appendChild(siblingsGroup);
     }
     var addActions = [];
-    if(canAddSpouse(p)) addActions.push(['spouse','Spouse']);
-    if(canAddChild(p)) addActions.push(['child','Child']);
-    if(canAddSibling(p)) addActions.push(['sibling','Sibling']);
-    if(canAddParent(p)) addActions.push(['parent','Parents']);
+    var addTarget = p;
+    if(p.placeholder && placeholderOwner(p)){
+      addTarget = placeholderOwner(p);
+      addActions.push(['spouse','Spouse']);
+      if(canAddChild(addTarget)) addActions.push(['child','Child']);
+    } else {
+      if(canAddSpouse(p)) addActions.push(['spouse','Spouse']);
+      if(canAddChild(p)) addActions.push(['child','Child']);
+      if(canAddSibling(p)) addActions.push(['sibling','Sibling']);
+      if(canAddParent(p)) addActions.push(['parent','Parents']);
+    }
     if(addActions.length){
       var addGroup = document.createElement('div');
       addGroup.className = 'relation-group';
@@ -797,7 +807,7 @@
         chip.textContent = 'Add ' + action[1];
         chip.addEventListener('click', function(e){
           e.stopPropagation();
-          openAddPopover(p, action[0], chip);
+          openAddPopover(addTarget, action[0], chip);
         });
         addLinks.appendChild(chip);
       });
@@ -1032,7 +1042,12 @@
     el.setAttribute('role','button');
     var yl = yearsLabel(p);
     var zones = '';
-    if(!p.placeholder){
+    var placeholderButton = '';
+    if(p.placeholder){
+      zones = edgeZoneButton('top', p.id) + edgeZoneButton('bottom', p.id) +
+              edgeZoneButton('left', p.id) + edgeZoneButton('right', p.id);
+      placeholderButton = '<button type="button" class="placeholder-add" data-placeholder-name="1"><span>+</span> Add name</button>';
+    } else {
       zones = edgeZoneButton('top', p.id) + edgeZoneButton('bottom', p.id) +
               edgeZoneButton('left', p.id) + edgeZoneButton('right', p.id);
     }
@@ -1042,26 +1057,37 @@
       '<div class="name">'+esc(p.name)+'</div>' +
       (p.maidenName ? '<div class="maiden-name">('+esc(p.maidenName)+')</div>' : '') +
       (yl ? '<div class="years">'+esc(yl)+'</div>' : '') +
+      placeholderButton +
       (opts.isRoot ? '<div class="badge founder">Family Founder</div>' : '');
+    var owner = p.placeholder ? placeholderOwner(p) : null;
     ['top','bottom','left','right'].forEach(function(direction){
       var zone = el.querySelector('.edge-add-zone.' + direction);
       if(!zone) return;
-      zone.dataset.canSpouse = canAddSpouse(p) ? '1' : '0';
-      zone.dataset.canSibling = canAddSibling(p) ? '1' : '0';
-      zone.dataset.canChild = canAddChild(p) ? '1' : '0';
-      zone.dataset.canParent = canAddParent(p) ? '1' : '0';
-      zone.dataset.hasPartner = partnerFor(p) ? '1' : '0';
+      if(p.placeholder && !owner){
+        zone.classList.add('no-action');
+        return;
+      }
+      var target = p.placeholder ? owner : p;
+      zone.dataset.canSpouse = canAddSpouse(target) ? '1' : '0';
+      zone.dataset.canSibling = canAddSibling(target) ? '1' : '0';
+      zone.dataset.canChild = canAddChild(target) ? '1' : '0';
+      zone.dataset.canParent = canAddParent(target) ? '1' : '0';
+      zone.dataset.hasPartner = partnerFor(target) ? '1' : '0';
+      if(p.placeholder) zone.dataset.placeholderOwner = owner ? owner.id : '';
       zone.tabIndex = 0;
       zone.setAttribute('role','button');
       zone.setAttribute('aria-label','Add family member via ' + direction + ' edge');
-      if(direction === 'top' && !canAddParent(p)){
-        zone.classList.add('no-action');
-      } else if((direction === 'left' || direction === 'right') && !(canAddSpouse(p) || canAddSibling(p))){
-        zone.classList.add('no-action');
-      } else if(direction === 'bottom' && !canAddChild(p)){
-        zone.classList.add('disabled');
-        zone.title = !partnerFor(p) ? 'Add a spouse first' : '';
-        zone.setAttribute('aria-disabled','true');
+      if(direction === 'top'){
+        if(p.placeholder || !canAddParent(target)) zone.classList.add('no-action');
+      } else if((direction === 'left' || direction === 'right')){
+        if(p.placeholder && !canAddSpouse(target)) zone.classList.add('no-action');
+        else if(!p.placeholder && !(canAddSpouse(target) || canAddSibling(target))) zone.classList.add('no-action');
+      } else if(direction === 'bottom'){
+        if(!canAddChild(target)){
+          zone.classList.add('disabled');
+          zone.title = !partnerFor(target) ? 'Add a spouse first' : '';
+          zone.setAttribute('aria-disabled','true');
+        }
       }
       if(zone.classList.contains('no-action')) zone.removeAttribute('tabindex');
       zone.addEventListener('keydown', function(e){
@@ -1069,7 +1095,17 @@
         if(e.key==='Enter'||e.key===' '){ e.preventDefault(); e.stopPropagation(); handleEdgeZone(zone, p); }
       });
     });
-    el.addEventListener('click', function(e){ if(e.target.closest('.edge-add-zone')) return; e.stopPropagation(); playPageTurnSound(); openDetails(p); });
+    if(placeholderButton){
+      var addNameBtn = el.querySelector('.placeholder-add');
+      if(addNameBtn) addNameBtn.addEventListener('click', function(e){
+        e.stopPropagation();
+        closeAddPopover();
+        closeEdgeChoice();
+        if(!owner) return;
+        openAddPopover(owner, 'spouse', el);
+      });
+    }
+    el.addEventListener('click', function(e){ if(e.target.closest('.edge-add-zone') || e.target.closest('.placeholder-add')) return; e.stopPropagation(); playPageTurnSound(); openDetails(p); });
     el.addEventListener('keydown', function(e){ if(e.target !== el) return; if(e.key==='Enter'||e.key===' '){ e.preventDefault(); playPageTurnSound(); openDetails(p); } });
     return el;
   }
@@ -1088,6 +1124,14 @@
   function canAddChild(p){ return !p.placeholder && !!partnerFor(p); }
   function canAddSibling(p){ return !p.placeholder && parentOf[p.id] !== undefined; }
   function canAddParent(p){ return !p.placeholder && !((p.parents||[]).length); }
+  function placeholderOwner(p){
+    if(!p || !p.placeholder) return null;
+    var suffix = '-spouse-placeholder';
+    if(p.id.slice(-suffix.length) !== suffix) return null;
+    var owner = byId[p.id.slice(0, -suffix.length)];
+    if(!owner) return null;
+    return partnerFor(owner) && partnerFor(owner).id === p.id ? owner : null;
+  }
   function defaultGenderFor(kind, p){
     if(kind === 'spouse'){ if(p.gender === 'male') return 'female'; if(p.gender === 'female') return 'male'; }
     return 'unknown';
@@ -1256,25 +1300,22 @@
     }
   }
   function edgeAction(direction, person, zone){
-    var canSpouse = zone.dataset.canSpouse === '1';
-    var canSibling = zone.dataset.canSibling === '1';
-    var canChild = zone.dataset.canChild === '1';
-    var canParent = zone.dataset.canParent === '1';
+    var target = person.placeholder ? (placeholderOwner(person) || person) : person;
+    var isPlaceholderAnchor = !!person.placeholder;
     if(direction === 'top'){
-      var parentOpts = [];
-      if(canParent) parentOpts.push({kind:'parent-mother', label:'Mother', focus:'.add-mother-name'}, {kind:'parent-father', label:'Father', focus:'.add-father-name'});
-      return parentOpts;
+      if(!canAddParent(target)) return [];
+      return [{kind:'parent-mother', label:'Mother', focus:'.add-mother-name'}, {kind:'parent-father', label:'Father', focus:'.add-father-name'}];
     }
     if(direction === 'bottom'){
-      if(!canChild){
+      if(!canAddChild(target)){
         showToast('Add a spouse first to add children.');
         return null;
       }
       return [{kind:'child', label:'Son', gender:'male'}, {kind:'child', label:'Daughter', gender:'female'}];
     }
     var sideOpts = [];
-    if(canSpouse) sideOpts.push({kind:'spouse', label:'Spouse'});
-    if(canSibling) sideOpts.push({kind:'sibling', label:'Sibling'});
+    if(canAddSpouse(target)) sideOpts.push({kind:'spouse', label: isPlaceholderAnchor ? 'Name spouse' : 'Spouse'});
+    if(canAddSibling(target)) sideOpts.push({kind:'sibling', label:'Sibling'});
     return sideOpts;
   }
   function handleEdgeZone(zone, person){
@@ -1307,15 +1348,17 @@
     el.classList.add('open');
   }
   function launchEdgeForm(opt, person){
+    var target = person.placeholder ? (placeholderOwner(person) || person) : person;
+    if(!target || target.placeholder) return;
     if(opt.kind === 'parent-mother'){
-      openAddPopover(person, 'parent', cardEls[person.id] || null, '.add-mother-name');
+      openAddPopover(target, 'parent', cardEls[target.id] || null, '.add-mother-name');
       return;
     }
     if(opt.kind === 'parent-father'){
-      openAddPopover(person, 'parent', cardEls[person.id] || null, '.add-father-name');
+      openAddPopover(target, 'parent', cardEls[target.id] || null, '.add-father-name');
       return;
     }
-    openAddPopover(person, opt.kind, cardEls[person.id] || null, null, opt.gender);
+    openAddPopover(target, opt.kind, cardEls[target.id] || null, null, opt.gender);
   }
   function positionEdgeChoice(el, zone){
     var zoneRect = zone.getBoundingClientRect();
