@@ -603,6 +603,7 @@
     var marriageLinks = [];
     var parentLinks = [];
     var childLinks = [];
+    var anchors = {};
     var mainRoot = roots.indexOf(ROOT_ID) !== -1 ? ROOT_ID : roots[0];
     var claimed = {};
     var primaryWidths = {};
@@ -670,26 +671,135 @@
     widthOf(mainRoot);
     placeSpine(mainRoot, 0, 0, 0);
 
-    var branchOffset = (primaryWidths[mainRoot] || 0) + GAP_X*3;
+    function coupleRight(id){
+      var p = byId[id];
+      var right = positions[id] ? positions[id].left + CARD_W : 0;
+      var partner = p && partnerFor(p);
+      if(partner && positions[partner.id]) right = positions[partner.id].left + CARD_W;
+      return right;
+    }
+
     roots.filter(function(r){ return r !== mainRoot; }).forEach(function(root){
       if(claimed[root]) return;
       var claimedKids = [];
+      var memberIds = [];
       var q = [root], seen = {}; seen[root] = true;
       while(q.length){
         var cur = q.shift();
+        memberIds.push(cur);
         (childrenOf[cur]||[]).forEach(function(cid){
           if(seen[cid]) return; seen[cid] = true; q.push(cid);
           if(claimed[cid]) claimedKids.push(cid);
         });
       }
-      var depthOffset = 0;
-      if(claimedKids.length){
-        var minGen = Math.min.apply(null, claimedKids.map(function(cid){ return positions[cid] ? positions[cid].gen : Infinity; }));
-        if(minGen !== Infinity) depthOffset = Math.max(0, minGen - 1);
+      // Resolve the in-law anchor: the placed couple whose person married into this
+      // branch's tree (their "spouse's parents"). Any branch member who married into
+      // an already-placed family can anchor us; the root couple is a natural case too.
+      var anchor = null;
+      for(var mi = 0; mi < memberIds.length && !anchor; mi++){
+        var mx = byId[memberIds[mi]];
+        var mxSpouse = mx && mx.spouse && byId[mx.spouse];
+        if(mxSpouse && positions[mxSpouse.id]){
+          var mxSpParentId = parentOf[mxSpouse.id];
+          if(mxSpParentId && byId[mxSpParentId] && positions[mxSpParentId]) anchor = {id: mxSpParentId, row: positions[mxSpParentId].gen};
+          else anchor = {id: mxSpouse.id, row: positions[mxSpouse.id].gen};
+          break;
+        }
       }
-      var bw = widthOf(root);
-      placeSpine(root, branchOffset, 0, 0, depthOffset);
-      branchOffset += bw + GAP_X*3;
+      // Fallback: a placed parent in another tree claims one of our children directly.
+      for(var ai = 0; ai < claimedKids.length && !anchor; ai++){
+        var ac = byId[claimedKids[ai]];
+        if(!ac) continue;
+        for(var pi = 0; pi < RAW.length; pi++){
+          var pp = RAW[pi];
+          if(pp.id === root || !byId[pp.id] || !positions[pp.id]) continue;
+          if((pp.children||[]).indexOf(ac.id) !== -1){
+            anchor = {id: pp.id, row: positions[pp.id].gen};
+            break;
+          }
+        }
+      }
+      if(anchor){
+        // Insert this family as a new column immediately to the right of its in-laws'
+        // couple, pushing everything further right over with a rigid x-cut shift so no
+        // card ever ends up overlapping or stranding far from the family it married into.
+        var bw = widthOf(root);
+        var slab = coupleRight(anchor.id) + GAP_X;
+        var shiftBy = bw + GAP_X;
+        var shiftSet = {};
+        couples.forEach(function(c){
+          if(!c.spouseId || !positions[c.primaryId] || !positions[c.spouseId]) return;
+          if(positions[c.primaryId].left >= slab){ shiftSet[c.primaryId] = true; shiftSet[c.spouseId] = true; }
+        });
+        Object.keys(positions).forEach(function(id){
+          if(shiftSet[id]) return;
+          if(positions[id].left >= slab) shiftSet[id] = true;
+        });
+        Object.keys(shiftSet).forEach(function(id){
+          positions[id].left += shiftBy; positions[id].cx += shiftBy;
+        });
+        var beforeIds = Object.keys(positions);
+        anchors[root] = anchor.id;
+        placeSpine(root, slab, 0, 0, anchor.row);
+        // Flush the placed branch so its leftmost card sits directly beside the in-law
+        // couple (placeSpine centers the root couple inside its reserved width).
+        var minBranchLeft = Infinity;
+        Object.keys(positions).forEach(function(id){
+          if(beforeIds.indexOf(id) !== -1) return;
+          if(positions[id].left < minBranchLeft) minBranchLeft = positions[id].left;
+        });
+        var flushBy = minBranchLeft === Infinity ? 0 : slab - minBranchLeft;
+        if(flushBy){
+          Object.keys(positions).forEach(function(id){
+            if(beforeIds.indexOf(id) !== -1) return;
+            positions[id].left += flushBy; positions[id].cx += flushBy;
+          });
+        }
+        // Layout-time overlap resolution: a few cards that the rigid cut could not
+        // move (their whole couple straddles the boundary) may now collide with the
+        // flush-placed branch. Shift only the cards that truly collide, whole couple
+        // at a time, so the branch keeps its place next to the in-laws. Connectors
+        // derive all geometry from final positions, so nothing dangles.
+        var branchIds = {};
+        Object.keys(positions).forEach(function(id){
+          if(beforeIds.indexOf(id) === -1) branchIds[id] = true;
+        });
+        for(var it = 0; it < 20; it++){
+          var moved = false;
+          var toMove = {};
+          Object.keys(branchIds).forEach(function(bid){
+            if(toMove[bid]) return;
+            var b = positions[bid];
+            Object.keys(positions).forEach(function(nid){
+              if(toMove[nid] || branchIds[nid]) return;
+              var n = positions[nid];
+              if(b.left < n.left + CARD_W && n.left < b.left + CARD_W && b.top < n.top + CARD_H && n.top < b.top + CARD_H) toMove[nid] = true;
+            });
+          });
+          Object.keys(toMove).forEach(function(nid){ toMove[nid] = positions[nid].left + CARD_W; });
+          Object.keys(toMove).forEach(function(nid){
+            var n = positions[nid];
+            var step = (toMove[nid] - n.left < shiftBy ? shiftBy : toMove[nid] - n.left) + GAP_X;
+            n.left += step; n.cx += step;
+            couples.forEach(function(c){
+              if(c.primaryId === nid) { if(positions[c.spouseId]){ positions[c.spouseId].left += step; positions[c.spouseId].cx += step; } }
+              if(c.spouseId === nid) { if(positions[c.primaryId]){ positions[c.primaryId].left += step; positions[c.primaryId].cx += step; } }
+            });
+            moved = true;
+          });
+          if(!moved) break;
+        }
+      } else {
+        // No in-law anchor: keep the branch as its own far-right stacked column.
+        var fallbackDepth = 0;
+        if(claimedKids.length){
+          var minGen = Math.min.apply(null, claimedKids.map(function(id){ return positions[id] ? positions[id].gen : Infinity; }));
+          if(minGen !== Infinity) fallbackDepth = Math.max(0, minGen - 1);
+        }
+        var curMaxRight = 0;
+        Object.keys(positions).forEach(function(id){ curMaxRight = Math.max(curMaxRight, positions[id].left + CARD_W); });
+        placeSpine(root, curMaxRight + GAP_X*3, 0, 0, fallbackDepth);
+      }
     });
 
     var maxRight = 0, maxBottom = 0;
@@ -698,7 +808,7 @@
       maxRight = Math.max(maxRight, pos.left + CARD_W);
       maxBottom = Math.max(maxBottom, pos.top + CARD_H);
     });
-    return {positions:positions, couples:couples, marriageLinks:marriageLinks, parentLinks:parentLinks, childLinks:childLinks, maxRight:maxRight, maxBottom:maxBottom};
+    return {positions:positions, couples:couples, marriageLinks:marriageLinks, parentLinks:parentLinks, childLinks:childLinks, anchors:anchors, maxRight:maxRight, maxBottom:maxBottom};
   }
 
   function curvePath(x1,y1,x2,y2){
