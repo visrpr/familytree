@@ -603,15 +603,14 @@
     var marriageLinks = [];
     var parentLinks = [];
     var childLinks = [];
-    var anchors = {};
     var mainRoot = roots.indexOf(ROOT_ID) !== -1 ? ROOT_ID : roots[0];
     var claimed = {};
     var primaryWidths = {};
 
-    function widthOf(id, skipWidow){
+    function widthOf(id, skipSpouse){
       var p = byId[id];
       var sp = partnerFor(p);
-      var hasSpouse = !!sp && !skipWidow;
+      var hasSpouse = !!sp && !skipSpouse;
       var selfW = hasSpouse ? (CARD_W*2 + SPOUSE_GAP) : CARD_W;
       var kids = (p.children||[]).filter(function(cid){ return byId[cid]; });
       var w;
@@ -624,31 +623,34 @@
       return w;
     }
 
+    // Simple deterministic layout. A parent's card sits at `left`; if partnered, its
+    // spouse is ALWAYS placed immediately to the right, exactly SPOUSE_GAP away. Parent
+    // + spouse form one adjacent block of width (CARD_W*2 + SPOUSE_GAP) that children
+    // are centered underneath. No in-law anchoring, no per-branch collision resolver:
+    // every block is laid out with a fixed GAP_X between adjacent siblings, and each
+    // independent root simply opens a new far-right column beyond the rightmost card.
     function placeSpine(id, left, depth, yOffset, depthOffset){
       depthOffset = depthOffset || 0;
       if(claimed[id]) return null;
       claimed[id] = true;
       var p = byId[id];
       var sp = partnerFor(p);
-      var isRealSpouse = !!sp && !sp.placeholder;
-      var hasSpouse = !!sp;
-      var spouseElsewhere = isRealSpouse && claimed[sp.id];
-      var displaySpouse = hasSpouse && !spouseElsewhere;
+      var spouseElsewhere = !!sp && !sp.placeholder && claimed[sp.id];
+      var hasSpouse = !!sp && !spouseElsewhere;
       var w = widthOf(id, spouseElsewhere);
       primaryWidths[id] = w;
       var cx = left + w/2;
       var y = (depth+depthOffset)*LEVEL_H + (yOffset || 0);
-      var primaryLeft = displaySpouse ? (cx - (CARD_W + SPOUSE_GAP/2)) : (cx - CARD_W/2);
-      positions[id] = {left:primaryLeft, top:y, cx:cx, cy:y + CARD_H/2, gen:depth+depthOffset, depth:depth, placeholder:false, person:p};
-      if(displaySpouse){
-        if(isRealSpouse) claimed[sp.id] = true;
-        var spLeft = cx + SPOUSE_GAP/2;
+      positions[id] = {left:left, top:y, cx:cx, cy:y + CARD_H/2, gen:depth+depthOffset, depth:depth, placeholder:false, person:p};
+      if(hasSpouse){
+        if(!sp.placeholder) claimed[sp.id] = true;
+        var spLeft = left + CARD_W + SPOUSE_GAP;
         positions[sp.id] = {left:spLeft, top:y, cx:cx, cy:y + CARD_H/2, gen:depth+depthOffset, depth:depth, placeholder:!!sp.placeholder, person:sp};
         couples.push({primaryId:id, spouseId:sp.id, cx:cx, top:y, depth:depth+depthOffset});
       } else {
         couples.push({primaryId:id, spouseId:null, cx:cx, top:y, depth:depth+depthOffset});
       }
-      if(isRealSpouse && spouseElsewhere) marriageLinks.push({a:id, b:sp.id});
+      if(sp && !sp.placeholder && spouseElsewhere) marriageLinks.push({a:id, b:sp.id});
       var kids = (p.children||[]).filter(function(cid){ return byId[cid]; });
       if(!collapsed.has(id) && kids.length){
         var kw = kids.map(function(cid){ return widthOf(cid); });
@@ -671,135 +673,58 @@
     widthOf(mainRoot);
     placeSpine(mainRoot, 0, 0, 0);
 
-    function coupleRight(id){
-      var p = byId[id];
-      var right = positions[id] ? positions[id].left + CARD_W : 0;
-      var partner = p && partnerFor(p);
-      if(partner && positions[partner.id]) right = positions[partner.id].left + CARD_W;
-      return right;
-    }
-
+    // Every other root (a person with no parents who is not someone else's spouse) opens
+    // its own independent far-right column, pushed beyond the rightmost card so columns
+    // can never overlap. A married-in spouse is not a branch of its own: it is simply the
+    // card placed to the right of its partner by placeSpine.
     roots.filter(function(r){ return r !== mainRoot; }).forEach(function(root){
       if(claimed[root]) return;
-      var claimedKids = [];
-      var memberIds = [];
-      var q = [root], seen = {}; seen[root] = true;
-      while(q.length){
-        var cur = q.shift();
-        memberIds.push(cur);
-        (childrenOf[cur]||[]).forEach(function(cid){
-          if(seen[cid]) return; seen[cid] = true; q.push(cid);
-          if(claimed[cid]) claimedKids.push(cid);
-        });
-      }
-      // Resolve the in-law anchor: the placed couple whose person married into this
-      // branch's tree (their "spouse's parents"). Any branch member who married into
-      // an already-placed family can anchor us; the root couple is a natural case too.
-      var anchor = null;
-      for(var mi = 0; mi < memberIds.length && !anchor; mi++){
-        var mx = byId[memberIds[mi]];
-        var mxSpouse = mx && mx.spouse && byId[mx.spouse];
-        if(mxSpouse && positions[mxSpouse.id]){
-          var mxSpParentId = parentOf[mxSpouse.id];
-          if(mxSpParentId && byId[mxSpParentId] && positions[mxSpParentId]) anchor = {id: mxSpParentId, row: positions[mxSpParentId].gen};
-          else anchor = {id: mxSpouse.id, row: positions[mxSpouse.id].gen};
-          break;
-        }
-      }
-      // Fallback: a placed parent in another tree claims one of our children directly.
-      for(var ai = 0; ai < claimedKids.length && !anchor; ai++){
-        var ac = byId[claimedKids[ai]];
-        if(!ac) continue;
-        for(var pi = 0; pi < RAW.length; pi++){
-          var pp = RAW[pi];
-          if(pp.id === root || !byId[pp.id] || !positions[pp.id]) continue;
-          if((pp.children||[]).indexOf(ac.id) !== -1){
-            anchor = {id: pp.id, row: positions[pp.id].gen};
-            break;
+      var curMaxRight = 0;
+      Object.keys(positions).forEach(function(id){ curMaxRight = Math.max(curMaxRight, positions[id].left + CARD_W); });
+      placeSpine(root, curMaxRight + GAP_X*3, 0, 0, 0);
+    });
+
+    // One global spacing pass that guarantees no two cards ever overlap and every
+    // adjacent block keeps at least GAP_X between them. Cards on the same generation
+    // row are walked left->right; if the next block collides with (or crowds) the one
+    // before it, it is pushed right far enough to restore the gap. Each parent+spouse
+    // pair moves as one unit (they already share their parent's left, so shifting one
+    // rows a whole block without ever tearing a couple apart).
+    var rows = {};
+    Object.keys(positions).forEach(function(id){
+      var pos = positions[id];
+      if(pos.placeholder) return;
+      // Only block-heads participate in row spacing: a spouse card always rides with its
+      // primary and must keep its fixed SPOUSE_GAP, never an extra GAP_X.
+      if(primaryWidths[id] === undefined) return;
+      var g = pos.gen;
+      (rows[g] = rows[g] || []).push(id);
+    });
+    Object.keys(rows).forEach(function(g){
+      rows[g].sort(function(a,b){ return positions[a].left - positions[b].left; });
+    });
+    var prevByRow = {};
+    Object.keys(rows).forEach(function(g){
+      rows[g].forEach(function(id){
+        var cur = positions[id];
+        var prevId = prevByRow[g];
+        if(prevId !== undefined){
+          var prev = positions[prevId];
+          var minLeft = prev.left + CARD_W + GAP_X;
+          if(cur.left < minLeft){
+            var blockLeft = cur.left;
+            var dx = minLeft - cur.left;
+            cur.left += dx; cur.cx += dx;
+            // move the block's own right-side spouse card too — only if it was actually
+            // placed as part of this block (immediately beside this card, SPOUSE_GAP away).
+            // A spouse that lives in a far-right tree of its own is never touched.
+            var curSp = cur.person && partnerFor(cur.person);
+            var spPos = curSp && positions[curSp.id];
+            if(spPos && spPos.left === blockLeft + CARD_W + SPOUSE_GAP){ spPos.left += dx; spPos.cx += dx; }
           }
         }
-      }
-      if(anchor){
-        // Insert this family as a new column immediately to the right of its in-laws'
-        // couple, pushing everything further right over with a rigid x-cut shift so no
-        // card ever ends up overlapping or stranding far from the family it married into.
-        var bw = widthOf(root);
-        var slab = coupleRight(anchor.id) + GAP_X;
-        var shiftBy = bw + GAP_X;
-        var shiftSet = {};
-        couples.forEach(function(c){
-          if(!c.spouseId || !positions[c.primaryId] || !positions[c.spouseId]) return;
-          if(positions[c.primaryId].left >= slab){ shiftSet[c.primaryId] = true; shiftSet[c.spouseId] = true; }
-        });
-        Object.keys(positions).forEach(function(id){
-          if(shiftSet[id]) return;
-          if(positions[id].left >= slab) shiftSet[id] = true;
-        });
-        Object.keys(shiftSet).forEach(function(id){
-          positions[id].left += shiftBy; positions[id].cx += shiftBy;
-        });
-        var beforeIds = Object.keys(positions);
-        anchors[root] = anchor.id;
-        placeSpine(root, slab, 0, 0, anchor.row);
-        // Flush the placed branch so its leftmost card sits directly beside the in-law
-        // couple (placeSpine centers the root couple inside its reserved width).
-        var minBranchLeft = Infinity;
-        Object.keys(positions).forEach(function(id){
-          if(beforeIds.indexOf(id) !== -1) return;
-          if(positions[id].left < minBranchLeft) minBranchLeft = positions[id].left;
-        });
-        var flushBy = minBranchLeft === Infinity ? 0 : slab - minBranchLeft;
-        if(flushBy){
-          Object.keys(positions).forEach(function(id){
-            if(beforeIds.indexOf(id) !== -1) return;
-            positions[id].left += flushBy; positions[id].cx += flushBy;
-          });
-        }
-        // Layout-time overlap resolution: a few cards that the rigid cut could not
-        // move (their whole couple straddles the boundary) may now collide with the
-        // flush-placed branch. Shift only the cards that truly collide, whole couple
-        // at a time, so the branch keeps its place next to the in-laws. Connectors
-        // derive all geometry from final positions, so nothing dangles.
-        var branchIds = {};
-        Object.keys(positions).forEach(function(id){
-          if(beforeIds.indexOf(id) === -1) branchIds[id] = true;
-        });
-        for(var it = 0; it < 20; it++){
-          var moved = false;
-          var toMove = {};
-          Object.keys(branchIds).forEach(function(bid){
-            if(toMove[bid]) return;
-            var b = positions[bid];
-            Object.keys(positions).forEach(function(nid){
-              if(toMove[nid] || branchIds[nid]) return;
-              var n = positions[nid];
-              if(b.left < n.left + CARD_W && n.left < b.left + CARD_W && b.top < n.top + CARD_H && n.top < b.top + CARD_H) toMove[nid] = true;
-            });
-          });
-          Object.keys(toMove).forEach(function(nid){ toMove[nid] = positions[nid].left + CARD_W; });
-          Object.keys(toMove).forEach(function(nid){
-            var n = positions[nid];
-            var step = (toMove[nid] - n.left < shiftBy ? shiftBy : toMove[nid] - n.left) + GAP_X;
-            n.left += step; n.cx += step;
-            couples.forEach(function(c){
-              if(c.primaryId === nid) { if(positions[c.spouseId]){ positions[c.spouseId].left += step; positions[c.spouseId].cx += step; } }
-              if(c.spouseId === nid) { if(positions[c.primaryId]){ positions[c.primaryId].left += step; positions[c.primaryId].cx += step; } }
-            });
-            moved = true;
-          });
-          if(!moved) break;
-        }
-      } else {
-        // No in-law anchor: keep the branch as its own far-right stacked column.
-        var fallbackDepth = 0;
-        if(claimedKids.length){
-          var minGen = Math.min.apply(null, claimedKids.map(function(id){ return positions[id] ? positions[id].gen : Infinity; }));
-          if(minGen !== Infinity) fallbackDepth = Math.max(0, minGen - 1);
-        }
-        var curMaxRight = 0;
-        Object.keys(positions).forEach(function(id){ curMaxRight = Math.max(curMaxRight, positions[id].left + CARD_W); });
-        placeSpine(root, curMaxRight + GAP_X*3, 0, 0, fallbackDepth);
-      }
+        prevByRow[g] = id;
+      });
     });
 
     var maxRight = 0, maxBottom = 0;
@@ -808,13 +733,9 @@
       maxRight = Math.max(maxRight, pos.left + CARD_W);
       maxBottom = Math.max(maxBottom, pos.top + CARD_H);
     });
-    return {positions:positions, couples:couples, marriageLinks:marriageLinks, parentLinks:parentLinks, childLinks:childLinks, anchors:anchors, maxRight:maxRight, maxBottom:maxBottom};
+    return {positions:positions, couples:couples, marriageLinks:marriageLinks, parentLinks:parentLinks, childLinks:childLinks, maxRight:maxRight, maxBottom:maxBottom};
   }
 
-  function curvePath(x1,y1,x2,y2){
-    var dy = y2-y1, c = dy*0.55;
-    return 'M'+x1+','+y1+' C'+x1+','+(y1+c)+' '+x2+','+(y2-c)+' '+x2+','+y2;
-  }
   function makeMarriageHeart(centerX, centerY){
     var heart = document.createElementNS('http://www.w3.org/2000/svg','text');
     heart.setAttribute('x', centerX);
@@ -825,14 +746,6 @@
   }
   function relateGraphic(graphic, ids){
     graphic.dataset.relatedCards = ids.join(' ');
-    return graphic;
-  }
-  function setCurveGraphic(graphic, x1, y1, x2, y2){
-    graphic.dataset.x1 = x1;
-    graphic.dataset.y1 = y1;
-    graphic.dataset.x2 = x2;
-    graphic.dataset.y2 = y2;
-    graphic.setAttribute('d', curvePath(x1, y1, x2, y2));
     return graphic;
   }
 
@@ -1801,39 +1714,52 @@
       }
     });
 
-    // 3) same-tree parent -> child curves (each branch runs from the parent's heart
-    //    straight down to its child card's top centre)
-    var childrenByParent = {};
+    // 3) same-tree + cross-tree parent -> child branches. Both link types feed the same
+    //    bezier builder so every branch renders identically and stays connected.
+    //    Each parent gets one shared vertical stem, then one smooth cubic bezier per child
+    //    that radiates from the stem and arrives vertically at the child's card top-centre
+    //    (no horizontal overhang onto the card). Every coordinate is derived from the plotted
+    //    card geometry in the same space cards are drawn, so connectors attach exactly.
+    function topCentreX(id){ return layout.positions[id].left + PAD + CARD_W/2; }
+    function topCentreY(id){ return layout.positions[id].top + PAD; }
+    var STEM_DROP = 16;
+    var branchKids = {};
     layout.childLinks.forEach(function(l){
-      (childrenByParent[l.parent] = childrenByParent[l.parent] || []).push(l.child);
+      (branchKids[l.parent] = branchKids[l.parent] || []).push({cid: l.child, cross: false});
     });
-    Object.keys(childrenByParent).forEach(function(parentId){
-      var startX = layout.positions[parentId].cx;
-      var startY = coupleBottom(parentId);
-      childrenByParent[parentId].forEach(function(cid){
-        var cpos = layout.positions[cid];
-        if(!cpos) return;
-        var kx = cpos.left + CARD_W/2, ky = cpos.top + PAD;
+    layout.parentLinks.forEach(function(l){
+      (branchKids[l.parent] = branchKids[l.parent] || []).push({cid: l.child, cross: true});
+    });
+    Object.keys(branchKids).forEach(function(parentId){
+      var kids = branchKids[parentId].filter(function(k){ return layout.positions[k.cid]; });
+      if(!kids.length) return;
+      var startX = layout.positions[parentId].cx + PAD, startY = coupleBottom(parentId);
+      // shared stem from the parent down into the gap, giving all child curves one origin
+      var stemY = startY + STEM_DROP;
+      var minKidY = Math.min.apply(null, kids.map(function(k){ return topCentreY(k.cid); }));
+      var ctrlY = Math.min(stemY + (minKidY - stemY) * 0.45, minKidY - 30);
+      var stem = document.createElementNS('http://www.w3.org/2000/svg','path');
+      stem.setAttribute('d', 'M' + startX + ',' + startY + ' L' + startX + ',' + stemY);
+      stem.setAttribute('class','edge');
+      stem.setAttribute('fill','none');
+      stem.dataset.parent = parentId;
+      svg.appendChild(stem);
+
+      kids.forEach(function(k){
+        var cid = k.cid;
+        var endX = topCentreX(cid), endY = topCentreY(cid);
+        // vertical-entry bezier: both control points share a level; the last control point's
+        // x equals the endpoint x so the curve meets the card straight-down at its top-centre
+        var d = 'M' + startX + ',' + stemY + ' C' + startX + ',' + ctrlY + ',' + endX + ',' + ctrlY + ',' + endX + ',' + endY;
         var path = document.createElementNS('http://www.w3.org/2000/svg','path');
-        setCurveGraphic(path, startX, startY, kx, ky);
+        path.setAttribute('d', d);
         path.setAttribute('class','edge');
+        path.setAttribute('fill','none');
         path.dataset.parent = parentId; path.dataset.child = cid;
         svg.appendChild(path);
-        nodesLayer.appendChild(makeRelationLabel(relLabel(cpos.person ? cpos.person.gender : 'unknown'), kx - PAD, ky, parentId, 'above'));
+        var cpos = layout.positions[cid];
+        if(!k.cross && cpos.person) nodesLayer.appendChild(makeRelationLabel(relLabel(cpos.person.gender || 'unknown'), endX - PAD, endY, parentId, 'above'));
       });
-    });
-
-    // 4) cross-tree parent -> child links (in-law families connected to the main tree)
-    layout.parentLinks.forEach(function(l){
-      var pp = layout.positions[l.parent], cp = layout.positions[l.child];
-      if(!pp || !cp) return;
-      var startX = pp.cx, startY = coupleBottom(l.parent);
-      var endX = cp.left + CARD_W/2, endY = cp.top + PAD;
-      var path = document.createElementNS('http://www.w3.org/2000/svg','path');
-      setCurveGraphic(path, startX, startY, endX, endY);
-      path.setAttribute('class','edge');
-      path.dataset.parent = l.parent; path.dataset.child = l.child;
-      svg.appendChild(path);
     });
 
     // 5) cross-tree marriage links (spouses living in different family trees)

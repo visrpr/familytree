@@ -107,7 +107,7 @@ function section(name) { console.log('\n' + name); }
   if (scriptMatch) {
     const inlineScript = scriptMatch[1];
     const glStartIdx = inlineScript.indexOf('function graphLayout(){');
-    const glEndIdx = inlineScript.indexOf('function curvePath(', glStartIdx);
+    const glEndIdx = inlineScript.indexOf('function makeMarriageHeart(', glStartIdx);
     assert(glStartIdx !== -1 && glEndIdx !== -1, 'graphLayout function found');
     const glSrc = inlineScript.slice(glStartIdx, glEndIdx);
     const CARD_W = 150, CARD_H = 220, GAP_X = 52, SPOUSE_GAP = 44, SIBLING_GAP = 48, LEVEL_GAP = 200, CHILD_Y_STEP = 10, PAD = 70;
@@ -143,6 +143,20 @@ function section(name) { console.log('\n' + name); }
     assert(linkOk, 'every parent/child link connects two positioned cards');
     const couplesOk = layout.couples.every((c) => c.spouseId === null || (layout.positions[c.primaryId] && layout.positions[c.spouseId]));
     assert(couplesOk, 'every couple has positioned partner cards');
+    // A married couple's two cards must stay side by side, with the SPOUSE card placed
+    // strictly to the RIGHT of the primary (parent) card and exactly SPOUSE_GAP apart.
+    // This is the core simplified rule; it also guards the regression where the old rigid
+    // in-law x-cut shoved a spouse card (Arya) ~990px right of her husband (Rajesh).
+    const spouseGapBad = [];
+    layout.couples.forEach((c) => {
+      if (!c.spouseId) return;
+      const pa = layout.positions[c.primaryId], pb = layout.positions[c.spouseId];
+      if (!pa || !pb || pa.placeholder || pb.placeholder) return;
+      const rightOf = pb.left > pa.left;
+      const gap = (pb.left - pa.left) - CARD_W;
+      if (!rightOf || gap !== SPOUSE_GAP) spouseGapBad.push(c.primaryId + '~' + c.spouseId + ' right=' + rightOf + ' gap=' + gap);
+    });
+    assert(spouseGapBad.length === 0, 'every spouse sits directly right of its partner card, exactly SPOUSE_GAP apart: ' + (spouseGapBad.length ? spouseGapBad.join(', ') : 'none'));
     const rootSet = new Set(['padmanabh', 'taranath-bhandarkar']);
     const disconnected = [];
     people.forEach((p) => {
@@ -155,35 +169,28 @@ function section(name) { console.log('\n' + name); }
     assert(disconnected.length === 0, 'every positioned person is connected via parent, spouse, or marriage (stray: ' + disconnected.join(', ') + ')');
 
     const anchorIds = Object.keys(layout.anchors || {});
-    assert(anchorIds.length >= 1, 'at least one in-law anchor resolved for a non-main branch');
-    anchorIds.forEach((rootId) => {
-      const anchor = layout.anchors[rootId];
-      const rootPos = layout.positions[rootId];
-      const anchorPos = layout.positions[anchor];
-      assert(!!rootPos && !!anchorPos, 'branch root and its in-law anchor are both positioned (' + rootId + ' -> ' + anchor + ')');
-      if (rootPos && anchorPos) {
-        let anchorRight = anchorPos.left + CARD_W;
-        const anchorCouple = layout.couples.find((c) => (c.primaryId === anchor || c.spouseId === anchor) && c.spouseId);
-        if (anchorCouple && anchorCouple.primaryId === anchor && layout.positions[anchorCouple.spouseId]) {
-          anchorRight = layout.positions[anchorCouple.spouseId].left + CARD_W;
-        }
-        const sameRow = rootPos.gen === anchorPos.gen;
-        const flushGap = rootPos.left - anchorRight;
-        assert(sameRow, 'branch root shares its in-law couple row (' + rootId + ' gen ' + rootPos.gen + ' vs anchor gen ' + anchorPos.gen + ')');
-        assert(flushGap === GAP_X, 'branch root sits directly beside its in-law couple (' + rootId + ' gap ' + flushGap + 'px, expected ' + GAP_X + ')');
-      }
+    assert(anchorIds.length === 0, 'no in-law anchors remain in the simplified layout');
+
+    // ---- bezier connector geometry (mirrors the renderer's branch builder) ----
+    const allBranchKids = {};
+    (layout.childLinks || []).forEach((l) => { (allBranchKids[l.parent] = allBranchKids[l.parent] || []).push(l.child); });
+    (layout.parentLinks || []).forEach((l) => { (allBranchKids[l.parent] = allBranchKids[l.parent] || []).push(l.child); });
+    let dropsChecked = 0, overhangBad = 0;
+    (Object.keys(allBranchKids) || []).forEach((pid) => {
+      const kids = allBranchKids[pid].filter((c) => layout.positions[c]);
+      if (!kids.length || !layout.positions[pid]) return;
+      const startX = layout.positions[pid].cx + PAD;
+      kids.forEach((c) => {
+        const endX = layout.positions[c].left + PAD + CARD_W / 2;
+        const endY = layout.positions[c].top + PAD;
+        dropsChecked++;
+        assert(endX === layout.positions[c].left + PAD + CARD_W / 2 && endY === layout.positions[c].top + PAD,
+          'bezier ends at its rendered child card top-centre (' + pid + '->' + c + ')');
+        if (endX !== layout.positions[c].left + PAD + CARD_W / 2) overhangBad++;
+      });
     });
-    const allCrossLinks = (layout.parentLinks || []).map((l) => ({ a: l.parent, b: l.child }))
-      .concat((layout.marriageLinks || []).map((l) => ({ a: l.a, b: l.b })));
-    const maxSpan = 6 * CARD_W;
-    const spansOk = allCrossLinks.every((l) => {
-      const pa = layout.positions[l.a], pb = layout.positions[l.b];
-      if (!pa || !pb) return true;
-      return Math.abs((pa.left + CARD_W / 2) - (pb.left + CARD_W / 2)) <= maxSpan;
-    });
-    assert(spansOk, 'every cross-tree link is spatially short (in-law family stays close, span <= ' + maxSpan + 'px)');
-    const expectedAnchors = JSON.stringify(Object.keys(layout.anchors || {}).sort()) === JSON.stringify(['taranath-bhandarkar']);
-    assert(expectedAnchors, 'seed data anchors the taranath branch to its in-laws');
+    assert(dropsChecked > 0, 'bezier endpoints were measured (' + dropsChecked + ')');
+    assert(overhangBad === 0, 'no bezier endpoint overhangs its target card (' + overhangBad + ' bad)');
   }
 
   console.log('\n------------------------------------');
