@@ -1801,20 +1801,19 @@
       }
     });
 
-    // 3) same-tree parent -> child curves (with a sibling rail across the children)
+    // 3) same-tree parent -> child curves (each branch runs from the parent's heart
+    //    straight down to its child card's top centre)
     var childrenByParent = {};
     layout.childLinks.forEach(function(l){
       (childrenByParent[l.parent] = childrenByParent[l.parent] || []).push(l.child);
     });
     Object.keys(childrenByParent).forEach(function(parentId){
-      var startX = layout.positions[parentId].cx + PAD;
+      var startX = layout.positions[parentId].cx;
       var startY = coupleBottom(parentId);
-      var childEndpoints = [];
       childrenByParent[parentId].forEach(function(cid){
         var cpos = layout.positions[cid];
         if(!cpos) return;
-        var kx = cpos.cx + PAD, ky = cpos.top + PAD;
-        childEndpoints.push({x:kx, y:ky});
+        var kx = cpos.left + CARD_W/2, ky = cpos.top + PAD;
         var path = document.createElementNS('http://www.w3.org/2000/svg','path');
         setCurveGraphic(path, startX, startY, kx, ky);
         path.setAttribute('class','edge');
@@ -1822,31 +1821,14 @@
         svg.appendChild(path);
         nodesLayer.appendChild(makeRelationLabel(relLabel(cpos.person ? cpos.person.gender : 'unknown'), kx - PAD, ky, parentId, 'above'));
       });
-      if(childEndpoints.length > 1){
-        var siblingRailY = Math.min.apply(null, childEndpoints.map(function(endpoint){ return endpoint.y; })) - 12;
-        var siblingRail = document.createElementNS('http://www.w3.org/2000/svg','line');
-        siblingRail.setAttribute('x1', childEndpoints[0].x); siblingRail.setAttribute('x2', childEndpoints[childEndpoints.length-1].x);
-        siblingRail.setAttribute('y1', siblingRailY); siblingRail.setAttribute('y2', siblingRailY);
-        siblingRail.setAttribute('class','sibling-line');
-        siblingRail.dataset.parent = parentId;
-        svg.appendChild(siblingRail);
-        childEndpoints.forEach(function(endpoint){
-          var siblingDrop = document.createElementNS('http://www.w3.org/2000/svg','line');
-          siblingDrop.setAttribute('x1', endpoint.x); siblingDrop.setAttribute('x2', endpoint.x);
-          siblingDrop.setAttribute('y1', siblingRailY); siblingDrop.setAttribute('y2', endpoint.y);
-          siblingDrop.setAttribute('class','sibling-line');
-          siblingDrop.dataset.parent = parentId;
-          svg.appendChild(siblingDrop);
-        });
-      }
     });
 
     // 4) cross-tree parent -> child links (in-law families connected to the main tree)
     layout.parentLinks.forEach(function(l){
       var pp = layout.positions[l.parent], cp = layout.positions[l.child];
       if(!pp || !cp) return;
-      var startX = pp.cx + PAD, startY = coupleBottom(l.parent);
-      var endX = cp.cx + PAD, endY = cp.top + PAD;
+      var startX = pp.cx, startY = coupleBottom(l.parent);
+      var endX = cp.left + CARD_W/2, endY = cp.top + PAD;
       var path = document.createElementNS('http://www.w3.org/2000/svg','path');
       setCurveGraphic(path, startX, startY, endX, endY);
       path.setAttribute('class','edge');

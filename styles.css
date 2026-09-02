@@ -113,7 +113,6 @@ header{padding:14px 26px 13px;border-bottom:1px solid var(--brass-line);backgrou
 #nodesLayer{position:absolute;top:0;left:0}
 
 .edge{fill:none;stroke:var(--line);stroke-width:1.75px;stroke-linecap:round}
-.sibling-line{fill:none;stroke:var(--brass);stroke-width:1.75px;stroke-linecap:round;stroke-dasharray:5 4}
 .edge.path-highlight{stroke:var(--maroon);stroke-width:2.5px}
 .edge.family-highlight{stroke:var(--brass-deep);stroke-width:2.5px}
 .marriage-line{stroke:#ca4f61;stroke-width:1.75px;stroke-linecap:round}
