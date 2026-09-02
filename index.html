@@ -498,7 +498,7 @@
     (byId[id].children||[]).forEach(function(cid){ calcDepth(cid, d+1); });
   })(ROOT_ID, 0);
 
-  var CARD_W = 150, CARD_H = 220, GAP_X = 52, SPOUSE_GAP = 44, SIBLING_GAP = 48, LEVEL_GAP = 200, CHILD_Y_STEP = 10, PAD = 70;
+  var CARD_W = 150, CARD_H = 220, GAP_X = 52, SPOUSE_GAP = 44, LEVEL_GAP = 200, CHILD_Y_STEP = 10, PAD = 70;
   var LEVEL_H = CARD_H + LEVEL_GAP;
 
   var collapsed = new Set();
@@ -539,24 +539,6 @@
       return sibling && sibling.id !== p.id && list.indexOf(sibling) === index;
     });
   }
-  function siblingGroupWidth(p){
-    var siblings = siblingsFor(p);
-    var total = siblings.reduce(function(width, sibling){
-      var spouseWidth = partnerFor(sibling) ? CARD_W + SPOUSE_GAP : 0;
-      return width + Math.max(CARD_W + spouseWidth, CARD_W);
-    }, 0);
-    return siblings.length ? SIBLING_GAP + total + (siblings.length-1)*GAP_X + GAP_X*7 : 0;
-  }
-
-  function topAncestorId(){
-    var id = ROOT_ID, guard = 0;
-    while(parentOf[id] !== undefined && byId[parentOf[id]] && guard < 60){
-      id = parentOf[id];
-      guard += 1;
-    }
-    return id;
-  }
-
   function graphLayout(){
     var childrenOf = {};
     RAW.forEach(function(p){
@@ -605,127 +587,115 @@
     var childLinks = [];
     var mainRoot = roots.indexOf(ROOT_ID) !== -1 ? ROOT_ID : roots[0];
     var claimed = {};
-    var primaryWidths = {};
 
-    function widthOf(id, skipSpouse){
-      var p = byId[id];
-      var sp = partnerFor(p);
-      var hasSpouse = !!sp && !skipSpouse;
-      var selfW = hasSpouse ? (CARD_W*2 + SPOUSE_GAP) : CARD_W;
-      var kids = (p.children||[]).filter(function(cid){ return byId[cid]; });
-      var w;
-      if(!kids.length || collapsed.has(id)){
-        w = selfW;
-      } else {
-        var kw = kids.map(function(cid){ return widthOf(cid); });
-        w = Math.max(selfW, kw.reduce(function(a,b){ return a+b; }, 0) + GAP_X*(kw.length-1));
-      }
-      return w;
-    }
+    // ---- Bottom-up tidy (layered) layout -----------------------------------------
+    // Each subtree is measured once, then its children are packed left->right at a fixed
+    // GAP_X and centered under the parent block. The parent's own two cards (primary +
+    // spouse) form a single centered block (spouse ALWAYS to the right of the primary at
+    // exactly SPOUSE_GAP). Because every sibling subtree knows its exact width and is
+    // bucketed during measurement, no post-hoc shift pass is needed: descendants can never
+    // be left behind a moved parent, and `cx` is by construction the true block center.
 
-    // Simple deterministic layout. A parent's card sits at `left`; if partnered, its
-    // spouse is ALWAYS placed immediately to the right, exactly SPOUSE_GAP away. Parent
-    // + spouse form one adjacent block of width (CARD_W*2 + SPOUSE_GAP) that children
-    // are centered underneath. No in-law anchoring, no per-branch collision resolver:
-    // every block is laid out with a fixed GAP_X between adjacent siblings, and each
-    // independent root simply opens a new far-right column beyond the rightmost card.
-    function placeSpine(id, left, depth, yOffset, depthOffset){
-      depthOffset = depthOffset || 0;
-      if(claimed[id]) return null;
-      claimed[id] = true;
-      var p = byId[id];
-      var sp = partnerFor(p);
-      var spouseElsewhere = !!sp && !sp.placeholder && claimed[sp.id];
-      var hasSpouse = !!sp && !spouseElsewhere;
-      var w = widthOf(id, spouseElsewhere);
-      primaryWidths[id] = w;
-      var cx = left + w/2;
-      var y = (depth+depthOffset)*LEVEL_H + (yOffset || 0);
-      positions[id] = {left:left, top:y, cx:cx, cy:y + CARD_H/2, gen:depth+depthOffset, depth:depth, placeholder:false, person:p};
-      if(hasSpouse){
-        if(!sp.placeholder) claimed[sp.id] = true;
-        var spLeft = left + CARD_W + SPOUSE_GAP;
-        positions[sp.id] = {left:spLeft, top:y, cx:cx, cy:y + CARD_H/2, gen:depth+depthOffset, depth:depth, placeholder:!!sp.placeholder, person:sp};
-        couples.push({primaryId:id, spouseId:sp.id, cx:cx, top:y, depth:depth+depthOffset});
-      } else {
-        couples.push({primaryId:id, spouseId:null, cx:cx, top:y, depth:depth+depthOffset});
-      }
-      if(sp && !sp.placeholder && spouseElsewhere) marriageLinks.push({a:id, b:sp.id});
-      var kids = (p.children||[]).filter(function(cid){ return byId[cid]; });
-      if(!collapsed.has(id) && kids.length){
-        var kw = kids.map(function(cid){ return widthOf(cid); });
-        var totalKidsW = kw.reduce(function(a,b){ return a+b; }, 0) + GAP_X*(kw.length-1);
-        var cursor = left + (w - totalKidsW)/2;
-        kids.forEach(function(cid,i){
-          if(claimed[cid]){
-            parentLinks.push({parent:id, child:cid});
-          } else {
-            var placed = placeSpine(cid, cursor, depth+1, (yOffset || 0) + i*CHILD_Y_STEP, depthOffset);
-            if(!placed) parentLinks.push({parent:id, child:cid});
-            else childLinks.push({parent:id, child:cid});
-          }
-          cursor += (primaryWidths[cid] || widthOf(cid) || CARD_W) + GAP_X;
-        });
-      }
-      return {w:w};
-    }
-
-    widthOf(mainRoot);
-    placeSpine(mainRoot, 0, 0, 0);
-
-    // Every other root (a person with no parents who is not someone else's spouse) opens
-    // its own independent far-right column, pushed beyond the rightmost card so columns
-    // can never overlap. A married-in spouse is not a branch of its own: it is simply the
-    // card placed to the right of its partner by placeSpine.
-    roots.filter(function(r){ return r !== mainRoot; }).forEach(function(root){
-      if(claimed[root]) return;
-      var curMaxRight = 0;
-      Object.keys(positions).forEach(function(id){ curMaxRight = Math.max(curMaxRight, positions[id].left + CARD_W); });
-      placeSpine(root, curMaxRight + GAP_X*3, 0, 0, 0);
-    });
-
-    // One global spacing pass that guarantees no two cards ever overlap and every
-    // adjacent block keeps at least GAP_X between them. Cards on the same generation
-    // row are walked left->right; if the next block collides with (or crowds) the one
-    // before it, it is pushed right far enough to restore the gap. Each parent+spouse
-    // pair moves as one unit (they already share their parent's left, so shifting one
-    // rows a whole block without ever tearing a couple apart).
-    var rows = {};
-    Object.keys(positions).forEach(function(id){
-      var pos = positions[id];
-      if(pos.placeholder) return;
-      // Only block-heads participate in row spacing: a spouse card always rides with its
-      // primary and must keep its fixed SPOUSE_GAP, never an extra GAP_X.
-      if(primaryWidths[id] === undefined) return;
-      var g = pos.gen;
-      (rows[g] = rows[g] || []).push(id);
-    });
-    Object.keys(rows).forEach(function(g){
-      rows[g].sort(function(a,b){ return positions[a].left - positions[b].left; });
-    });
-    var prevByRow = {};
-    Object.keys(rows).forEach(function(g){
-      rows[g].forEach(function(id){
-        var cur = positions[id];
-        var prevId = prevByRow[g];
-        if(prevId !== undefined){
-          var prev = positions[prevId];
-          var minLeft = prev.left + CARD_W + GAP_X;
-          if(cur.left < minLeft){
-            var blockLeft = cur.left;
-            var dx = minLeft - cur.left;
-            cur.left += dx; cur.cx += dx;
-            // move the block's own right-side spouse card too — only if it was actually
-            // placed as part of this block (immediately beside this card, SPOUSE_GAP away).
-            // A spouse that lives in a far-right tree of its own is never touched.
-            var curSp = cur.person && partnerFor(cur.person);
-            var spPos = curSp && positions[curSp.id];
-            if(spPos && spPos.left === blockLeft + CARD_W + SPOUSE_GAP){ spPos.left += dx; spPos.cx += dx; }
+    // Build the geometric layout of one unclaimed root subtree, honoring `claimed` so a
+    // member who lives in an earlier-placed tree is left to that tree (only a parentLinks
+    // stub is kept here). Returns a node tree: {id, width, hasSpouse, spouseElsewhere,
+    // kids:[{id,width,center,skip}...]} where `center` is a child's cx relative to this
+    // node's center.
+    function layoutTree(root){
+      function build(id){
+        if(claimed[id] && id !== root) return {id:id, width:0, kids:[], skip:true};
+        var p = byId[id];
+        var sp = partnerFor(p);
+        var spouseElsewhere = !!sp && !sp.placeholder && claimed[sp.id];
+        var hasSpouse = !!sp && !spouseElsewhere;
+        var bw = hasSpouse ? (CARD_W*2 + SPOUSE_GAP) : CARD_W;
+        var node = {id:id, width:bw, hasSpouse:hasSpouse, spouseElsewhere:spouseElsewhere, skip:false, kids:[]};
+        var kids = (p.children||[]).filter(function(c){ return byId[c]; });
+        if(!collapsed.has(id) && kids.length){
+          var laid = kids.map(function(c){ if(claimed[c]) return {id:c, width:0, kids:[], skip:true}; return build(c); });
+          node.kids = laid;
+          var active = laid.filter(function(k){ return !k.skip; });
+          if(active.length){
+            var tw = active.reduce(function(a,k){ return a + k.width; }, 0) + GAP_X*(active.length-1);
+            var x = -tw/2;
+            laid.forEach(function(k){ if(!k.skip){ k.center = x + k.width/2; x += k.width + GAP_X; } });
+            node.width = Math.max(bw, tw);
           }
         }
-        prevByRow[g] = id;
-      });
+        return node;
+      }
+      return build(root);
+    }
+
+    // Place a measured node tree. `cx` is the block center; `memberSet` collects every id
+    // belonging to this root so the whole subtree can be translated together afterward.
+    function placeTree(rootNode, cx, memberSet){
+      function place(node, centerX, gen, yOff){
+        var p = byId[node.id];
+        if(claimed[node.id]) return;
+        claimed[node.id] = true;
+        memberSet.add(node.id);
+        var y = gen*LEVEL_H + (yOff || 0);
+        var nodeCx = centerX;
+        if(node.hasSpouse){
+          var sp = partnerFor(p);
+          var primaryLeft = nodeCx - (CARD_W + SPOUSE_GAP/2);
+          positions[node.id] = {left:primaryLeft, top:y, cx:nodeCx, gen:gen, placeholder:false, person:p};
+          claimed[sp.id] = true; memberSet.add(sp.id);
+          var spLeft = primaryLeft + CARD_W + SPOUSE_GAP;
+          positions[sp.id] = {left:spLeft, top:y, cx:nodeCx, gen:gen, placeholder:!!sp.placeholder, person:sp};
+          couples.push({primaryId:node.id, spouseId:sp.id, cx:nodeCx, top:y, depth:gen});
+        } else {
+          positions[node.id] = {left:nodeCx - CARD_W/2, top:y, cx:nodeCx, gen:gen, placeholder:false, person:p};
+          couples.push({primaryId:node.id, spouseId:null, cx:nodeCx, top:y, depth:gen});
+        }
+        if(node.spouseElsewhere){
+          var msp = partnerFor(p);
+          if(msp && !msp.placeholder) marriageLinks.push({a:node.id, b:msp.id});
+        }
+        (node.kids||[]).forEach(function(kid, i){
+          if(kid.skip || claimed[kid.id]){
+            parentLinks.push({parent:node.id, child:kid.id});
+            return;
+          }
+          childLinks.push({parent:node.id, child:kid.id});
+          place(kid, centerX + kid.center, gen+1, (yOff||0) + i*CHILD_Y_STEP);
+        });
+      }
+      place(rootNode, cx, 0, 0);
+    }
+
+    // Main tree first, root block centered at cx=0 so descendants (possibly much wider)
+    // radiate out on both sides. After all roots the whole plane is translated so the
+    // leftmost card sits at x=0 (a centered, connected tree rather than one hugging the
+    // left edge).
+    var mainMember = new Set();
+    placeTree(layoutTree(mainRoot), 0, mainMember);
+
+    var curMaxRight = 0;
+    Object.keys(positions).forEach(function(id){ curMaxRight = Math.max(curMaxRight, positions[id].left + CARD_W); });
+
+    // Every other independent root opens its own far-right column pushed beyond the
+    // rightmost card so columns can never overlap. Married-in spouses are not separate
+    // roots: they ride beside their partner inside that partner's subtree.
+    roots.filter(function(r){ return r !== mainRoot; }).forEach(function(root){
+      if(claimed[root]) return;
+      var mem = new Set();
+      placeTree(layoutTree(root), 0, mem);
+      var localMin = Infinity;
+      mem.forEach(function(id){ var q = positions[id]; if(q) localMin = Math.min(localMin, q.left); });
+      var delta = (curMaxRight + GAP_X*3) - (localMin === Infinity ? 0 : localMin);
+      mem.forEach(function(id){ var q = positions[id]; if(q){ q.left += delta; q.cx += delta; } });
+      mem.forEach(function(id){ var q = positions[id]; if(q) curMaxRight = Math.max(curMaxRight, q.left + CARD_W); });
     });
+
+    // Center the whole layout: translate so the leftmost card lands at x=0.
+    var globalMin = Infinity;
+    Object.keys(positions).forEach(function(id){ globalMin = Math.min(globalMin, positions[id].left); });
+    if(globalMin < 0){
+      var shift = -globalMin;
+      Object.keys(positions).forEach(function(id){ positions[id].left += shift; positions[id].cx += shift; });
+    }
 
     var maxRight = 0, maxBottom = 0;
     Object.keys(positions).forEach(function(id){
@@ -1680,21 +1650,32 @@
       return pos.top + PAD + h;
     }
 
-    // parents whose couples route a child stub downward (same-tree childLinks or cross-tree parentLinks)
-    var routedParentSet = {};
-    layout.childLinks.forEach(function(l){ routedParentSet[l.parent] = true; });
-    layout.parentLinks.forEach(function(l){ routedParentSet[l.parent] = true; });
+    // Every parent with routed children (same-tree childLinks or cross-tree parentLinks)
+    // feeds one shared child-branch set. Used both to decide whether a couple's stub drops
+    // downward and to drive the bezier builder below.
+    var branchKids = {};
+    layout.childLinks.forEach(function(l){
+      (branchKids[l.parent] = branchKids[l.parent] || []).push({cid: l.child, cross: false});
+    });
+    layout.parentLinks.forEach(function(l){
+      (branchKids[l.parent] = branchKids[l.parent] || []).push({cid: l.child, cross: true});
+    });
 
-    // 2) marriage lines + hearts for couples
+    // Favourite helper: horizontal x of a card's left edge in SVG space (layout coords + PAD).
+    function cardLeftX(id){ return layout.positions[id].left + PAD; }
+
+    // 2) marriage lines + hearts for couples. x is taken purely from layout positions so the
+    //    line, heart and down-stub always agree with the bezier stem; y uses the real card
+    //    height (content-dependent).
     layout.couples.forEach(function(c){
       if(!c.spouseId) return;
       var primary = cardEls[c.primaryId], spouse = cardEls[c.spouseId];
       if(!primary || !spouse) return;
-      var topP = parseFloat(spouse.style.top);
       var marriageHeight = Math.max(primary.offsetHeight, spouse.offsetHeight);
-      var my = topP + marriageHeight/2;
-      var pL = parseFloat(primary.style.left) + primary.offsetWidth;
-      var sL = parseFloat(spouse.style.left);
+      var spTop = layout.positions[c.spouseId].top + PAD;
+      var my = spTop + marriageHeight/2;
+      var pL = cardLeftX(c.primaryId) + CARD_W;
+      var sL = cardLeftX(c.spouseId);
       var cx = (pL + sL)/2;
       var spPerson = layout.positions[c.spouseId].person;
       nodesLayer.appendChild(makeRelationLabel(spouseLabel(spPerson ? spPerson.gender : 'unknown'), layout.positions[c.spouseId].left - 10, my, c.spouseId, 'side'));
@@ -1705,10 +1686,10 @@
       mline.dataset.person = c.primaryId;
       svg.appendChild(mline);
       svg.appendChild(makeMarriageHeart(cx, my));
-      if(routedParentSet[c.primaryId]){
+      if(branchKids[c.primaryId]){
         var childBranchStart = document.createElementNS('http://www.w3.org/2000/svg','line');
         childBranchStart.setAttribute('x1', cx); childBranchStart.setAttribute('x2', cx);
-        childBranchStart.setAttribute('y1', my); childBranchStart.setAttribute('y2', topP + marriageHeight);
+        childBranchStart.setAttribute('y1', my); childBranchStart.setAttribute('y2', spTop + marriageHeight);
         childBranchStart.setAttribute('class','edge');
         svg.appendChild(relateGraphic(childBranchStart, [c.primaryId, c.spouseId]));
       }
@@ -1723,13 +1704,6 @@
     function topCentreX(id){ return layout.positions[id].left + PAD + CARD_W/2; }
     function topCentreY(id){ return layout.positions[id].top + PAD; }
     var STEM_DROP = 16;
-    var branchKids = {};
-    layout.childLinks.forEach(function(l){
-      (branchKids[l.parent] = branchKids[l.parent] || []).push({cid: l.child, cross: false});
-    });
-    layout.parentLinks.forEach(function(l){
-      (branchKids[l.parent] = branchKids[l.parent] || []).push({cid: l.child, cross: true});
-    });
     Object.keys(branchKids).forEach(function(parentId){
       var kids = branchKids[parentId].filter(function(k){ return layout.positions[k.cid]; });
       if(!kids.length) return;
@@ -1766,9 +1740,9 @@
     layout.marriageLinks.forEach(function(l){
       var a = cardEls[l.a], b = cardEls[l.b];
       if(!a || !b) return;
-      var ax = parseFloat(a.style.left) + a.offsetWidth;
+      var ax = cardLeftX(l.a) + CARD_W;
       var ay = parseFloat(a.style.top) + a.offsetHeight/2;
-      var bx = parseFloat(b.style.left);
+      var bx = cardLeftX(l.b);
       var by = parseFloat(b.style.top) + b.offsetHeight/2;
       var mline = document.createElementNS('http://www.w3.org/2000/svg','line');
       mline.setAttribute('x1', ax); mline.setAttribute('x2', bx);
@@ -1900,12 +1874,12 @@
     vp.scrollLeft = left; vp.scrollTop = top;
   }
   function minimumScale(){
-    return Math.max(0.1, Math.min(1, (vp.clientWidth-40)/canvasWidth));
+    return Math.max(0.1, Math.min(1, Math.min((vp.clientWidth-40)/canvasWidth, (vp.clientHeight-40)/canvasHeight)));
   }
   function fitToScreen(){
     scale = minimumScale();
     applyScale();
-    scrollCanvasTo(0,0,false);
+    scrollCanvasTo(Math.max(0, canvasWidth/2 - vp.clientWidth/(2*scale)), Math.max(0, canvasHeight/2 - vp.clientHeight/(2*scale)), false);
   }
   document.getElementById('in').onclick = function(){ scale = Math.min(1.6, scale+0.1); applyScale(); };
   document.getElementById('out').onclick = function(){ scale = Math.max(minimumScale(), scale-0.1); applyScale(); };

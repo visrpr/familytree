@@ -110,7 +110,7 @@ function section(name) { console.log('\n' + name); }
     const glEndIdx = inlineScript.indexOf('function makeMarriageHeart(', glStartIdx);
     assert(glStartIdx !== -1 && glEndIdx !== -1, 'graphLayout function found');
     const glSrc = inlineScript.slice(glStartIdx, glEndIdx);
-    const CARD_W = 150, CARD_H = 220, GAP_X = 52, SPOUSE_GAP = 44, SIBLING_GAP = 48, LEVEL_GAP = 200, CHILD_Y_STEP = 10, PAD = 70;
+    const CARD_W = 150, CARD_H = 220, GAP_X = 52, SPOUSE_GAP = 44, LEVEL_GAP = 200, CHILD_Y_STEP = 10, PAD = 70;
     const LEVEL_H = CARD_H + LEVEL_GAP;
     const layoutParentOf = {};
     people.forEach((p) => (p.children || []).forEach((c) => { if (byId[c]) layoutParentOf[c] = p.id; }));
@@ -123,11 +123,11 @@ function section(name) { console.log('\n' + name); }
     };
     const makeGraphLayout = new Function(
       'RAW', 'byId', 'ROOT_ID', 'parentOf', 'partnerFor', 'collapsed',
-      'CARD_W', 'CARD_H', 'GAP_X', 'SPOUSE_GAP', 'SIBLING_GAP', 'LEVEL_GAP', 'CHILD_Y_STEP', 'PAD', 'LEVEL_H',
+      'CARD_W', 'CARD_H', 'GAP_X', 'SPOUSE_GAP', 'LEVEL_GAP', 'CHILD_Y_STEP', 'PAD', 'LEVEL_H',
       glSrc + '\n return graphLayout;'
     );
     const layout = makeGraphLayout(people, byId, 'padmanabh', layoutParentOf, partnerForLayout, collapsed,
-      CARD_W, CARD_H, GAP_X, SPOUSE_GAP, SIBLING_GAP, LEVEL_GAP, CHILD_Y_STEP, PAD, LEVEL_H)();
+      CARD_W, CARD_H, GAP_X, SPOUSE_GAP, LEVEL_GAP, CHILD_Y_STEP, PAD, LEVEL_H)();
     const placedIds = Object.keys(layout.positions).filter((id) => !layout.positions[id].placeholder);
     const missing = people.filter((p) => placedIds.indexOf(p.id) === -1).map((p) => p.id);
     assert(missing.length === 0, 'every person is positioned exactly once (missing: ' + missing.join(', ') + ')');
@@ -157,6 +157,24 @@ function section(name) { console.log('\n' + name); }
       if (!rightOf || gap !== SPOUSE_GAP) spouseGapBad.push(c.primaryId + '~' + c.spouseId + ' right=' + rightOf + ' gap=' + gap);
     });
     assert(spouseGapBad.length === 0, 'every spouse sits directly right of its partner card, exactly SPOUSE_GAP apart: ' + (spouseGapBad.length ? spouseGapBad.join(', ') : 'none'));
+    // Tidy-tree invariant: every parent's cx is the true centre of its own two cards (spouse
+    // beside primary) so the bezier stem attaches exactly to the card pair — this is the old
+    // cx-drift regression where Padmanabh's stem was ~7000px from his actual card.
+    const pairCentreBad = [];
+    (layout.childLinks || []).forEach((l) => {
+      const pp = layout.positions[l.parent];
+      if (!pp) return;
+      const sp = layout.couples.find((c) => c.primaryId === l.parent);
+      let ownCentre;
+      if (sp && sp.spouseId) {
+        const sb = layout.positions[sp.spouseId];
+        ownCentre = (pp.left + CARD_W + sb.left) / 2;
+      } else {
+        ownCentre = pp.left + CARD_W / 2;
+      }
+      if (Math.abs(ownCentre - pp.cx) > 1) pairCentreBad.push(l.parent);
+    });
+    assert(pairCentreBad.length === 0, 'each parent cx is exactly centred on its own card pair (drift: ' + (pairCentreBad.length ? pairCentreBad.join(', ') : 'none') + ')');
     const rootSet = new Set(['padmanabh', 'taranath-bhandarkar']);
     const disconnected = [];
     people.forEach((p) => {
@@ -167,9 +185,15 @@ function section(name) { console.log('\n' + name); }
       if (!linkedAsChild && !linkedAsSpouse && !crossMarried) disconnected.push(p.id);
     });
     assert(disconnected.length === 0, 'every positioned person is connected via parent, spouse, or marriage (stray: ' + disconnected.join(', ') + ')');
-
-    const anchorIds = Object.keys(layout.anchors || {});
-    assert(anchorIds.length === 0, 'no in-law anchors remain in the simplified layout');
+    // The whole plane is translated so the leftmost card sits at x=0, and the main root is
+    // centered among its descendants (radiating both sides) rather than hugging the left edge.
+    const minLeft = Math.min.apply(null, placedIds.map((id) => layout.positions[id].left));
+    assert(minLeft === 0, 'layout shifted so leftmost card is at x=0 (was ' + minLeft + ')');
+    const ppRoot = layout.positions.padmanabh;
+    const maxRightHere = Math.max.apply(null, placedIds.map((id) => layout.positions[id].left + CARD_W));
+    const treeCentre = maxRightHere / 2;
+    // Root cx should be within ~12% of the tree horizontal centre, not at the far left.
+    assert(Math.abs(ppRoot.cx - treeCentre) / treeCentre < 0.12, 'main root is horizontally centred in the tree (root cx=' + ppRoot.cx.toFixed(0) + ', tree centre=' + treeCentre.toFixed(0) + ')');
 
     // ---- bezier connector geometry (mirrors the renderer's branch builder) ----
     const allBranchKids = {};
